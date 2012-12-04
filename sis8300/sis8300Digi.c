@@ -14,6 +14,9 @@
 typedef int32_t Ampl_t;
 typedef Ampl_t Ampl[4];
 
+/* 4 chars to little-endian 32-bit int */
+#define CHTO32(a,b,c,d)  (((a)<<0) | ((b)<<8) | ((c)<<16) | ((d)<<24))
+
 /* Register access primitives */
 static void us_sleep(unsigned us)
 {
@@ -435,6 +438,12 @@ int      rval = 0;
 	rwr(fd, SIS8300_SAMPLE_CONTROL_REG, cmd);
 
 	rwr(fd, SIS8300_ACQUISITION_CONTROL_STATUS_REG, 4);
+
+	if (     CHTO32('S','t','r','i') == rrd(fd, 0x4fc) 
+	     &&  CHTO32('p','B','P','M') == rrd(fd, 0x4fd) ) {
+		printf("SLAC AFE Firmware found; enabling RTM Trigger\n");
+		rwr(fd, 0x405, 0x10);
+	}
 
 	return rval;
 }
