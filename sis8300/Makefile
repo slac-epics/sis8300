@@ -11,7 +11,7 @@ include $(TOP)/configure/CONFIG
 
 LIBRARY_IOC += sis8300DigiComm
 sis8300DigiComm_SRCS_DEFAULT = sis8300DigiComm-stub.c
-sis8300DigiComm_SRCS_Linux = sis8300DigiComm.c sis8300Digi.c msgQ.c
+sis8300DigiComm_SRCS_Linux = sis8300DigiComm.c sis8300Digi.c msgQ.c gs.c
 DBD                = sis8300DigiComm.dbd
 PROD_IOC    += c109
 
