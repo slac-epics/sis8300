@@ -30,7 +30,7 @@ unsigned div_clkhl = SIS8300_BYPASS_9510_DIVIDER;
 int      opt;
 const char *dev = getenv("RACC_DEV");
 int      *i_p;
-Si5326ParmsRec sip = {
+Si5326ParmsRec sip_wb = {
 	/* Use 109MHz clock */
 	fin : 250000000UL,
 	n3  : 10,
@@ -41,10 +41,24 @@ Si5326ParmsRec sip = {
 	n1h : 5,
 	nc  : 10,
 	bw  : 1, /* dspllsim gave us this; no other info available :-( */
-	wb  : 1, /* currently used in wide-band mode */
+	wb  : 1,
+};
+Si5326ParmsRec sip_nb = {
+	/* Use 109MHz clock */
+	fin : 250000000UL,
+	n3  : 1000,
+	/* f3 = 250khz */
+	n2h : 100,
+	n2l : 109*2,
+	/* fo = 50*109 MHz */
+	n1h : 5,
+	nc  : 10,
+	bw  : 1, /* dspllsim gave us this; no other info available :-( */
+	wb  : 0,
 };
 Si5326Parms si5326_clk = 0;
-Sis8300ChannelSel sel = 0xa987654321ULL;
+Sis8300ChannelSel  sel = 0xa987654321ULL;
+Si5326Mode         mode;
 
 	while ( (opt = getopt(argc, argv, "hSbed:N:4")) > 0 ) {
 		i_p = 0;
@@ -52,7 +66,7 @@ Sis8300ChannelSel sel = 0xa987654321ULL;
 			default:
 			case 'h': usage(argv[0]); return 0;
 
-			case 'S': si5326_clk = &sip; break;
+			case 'S': si5326_clk = &sip_wb; break;
 			case 'b': div_clkhl  = 0; break;
 	
 			case 'd': dev        = optarg; break;
@@ -83,6 +97,25 @@ Sis8300ChannelSel sel = 0xa987654321ULL;
 	if ( (fd = open(dev, O_RDWR)) < 0 ) {
 		perror("opening device");
 		return 1;
+	}
+
+	if ( si5326_clk ) {
+		switch ( (mode = sis8300ClkDetect( fd )) ) {
+			default:
+				fprintf(stderr,"Sis8300ClkDetect - unknown result %i\n", mode);
+			return 1;
+			
+			case Si5326_NoReference:
+				fprintf(stdout,"Sis8300 - no reference detected\n");
+			return 1;
+
+			case Si5326_NarrowbandMode:
+				si5326_clk = &sip_nb;
+			break;
+			case Si5326_WidebandMode:
+				si5326_clk = &sip_wb;
+			break;
+		}
 	}
 
 	if ( sis8300DigiSetup( fd, si5326_clk, div_clkhl, exttrig ) ) {

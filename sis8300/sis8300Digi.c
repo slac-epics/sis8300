@@ -225,6 +225,33 @@ unsigned bypss;
 	ad9510_wr(fd, i, 0x5a, 0x01 ); 
 }
 
+Si5326Mode
+sis8300ClkDetect(int fd)
+{
+Si5326Mode rval;
+uint32_t   old_0;
+
+	/* Reset */
+	si5326_wr(fd, 136, 0x80);
+	us_sleep( 1000 );
+
+	/* If there is no reference at all then the device is probably not strapped right */
+	if ( si5326_rd(fd, 129) & 1 )
+		return Si5326_NoReference;
+
+	/* If we can switch to free-run mode and see a clock on CLKIN2 then we have
+     * a proper reference
+	 */
+	old_0 = si5326_rd(fd, 0);
+	si5326_wr(fd, 0, old_0 & ~0x40);
+
+	rval = (si5326_rd(fd, 129) & 0x4) ? Si5326_WidebandMode : Si5326_NarrowbandMode;
+
+	si5326_wr(fd, 0, old_0);
+
+	return rval;
+}
+
 static int64_t
 si5326_setup(int fd, Si5326Parms p)
 {
