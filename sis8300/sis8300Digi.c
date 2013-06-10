@@ -17,10 +17,12 @@ typedef Ampl_t Ampl[4];
 /* 4 chars to little-endian 32-bit int */
 #define CHTO32(a,b,c,d)  (((a)<<0) | ((b)<<8) | ((c)<<16) | ((d)<<24))
 
+#define SIS8300_QSPI_REG 0x400
+
 /* Register access primitives */
 static void us_sleep(unsigned us)
 {
-struct timespec t;
+struct timespec t, rem;
 	if ( us > 1000000UL ) {
 		t.tv_sec  = us/1000000UL;
 		t.tv_nsec = (us - t.tv_sec * 1000000UL)*1000UL;
@@ -28,7 +30,8 @@ struct timespec t;
 		t.tv_sec  = 0;
 		t.tv_nsec = us * 1000UL;
 	}
-	nanosleep( &t, 0 );
+	while ( nanosleep( &t, &rem ) && EINTR == errno )
+		t=rem;
 }
 
 static uint32_t
@@ -361,7 +364,7 @@ unsigned n3max;
 
 	si5326_wr(fd, 136, 0x40); /* ICAL */
 
-	us_sleep( 10000 );
+	us_sleep( 100000 );
 	
 	/* Loss of lock or missing reference ? */
 	if ( si5326_rd(fd, 129) & 1 ) {
@@ -550,4 +553,39 @@ printf("Setting SIM: %5"PRId32" %5"PRId32" %5"PRId32" %5"PRId32"\n", a,b,c,d);
 		 * not).
 		 */
 	}
+}
+
+int 
+sis8300DigiQspiWriteRead(const void *device, int data_out, uint16_t *data_in)
+{
+sis8300_reg r;
+struct timespec req, rem;
+int    fd = (intptr_t)device;
+
+	r.offset = SIS8300_QSPI_REG;
+
+	if ( data_out >= 0 ) {
+		r.data = data_out;
+		if ( ioctl(fd, SIS8300_REG_WRITE, &r) ) {
+			return -1;
+		}
+
+		/* must wait after write - there is no way for us to know if the transfer
+		 * is complete. Transferring 32 bits @30MB/s = 1.07 us...
+		 */
+		req.tv_sec  = 0;
+		req.tv_nsec = 2000;
+		while (  nanosleep( &req, &rem ) && (EINTR == errno) ) {
+			req = rem;
+		}
+	}
+
+	if ( data_in ) {
+		if ( ioctl(fd, SIS8300_REG_READ, &r) ) {
+			return -1;
+		}
+		*data_in = r.data;
+	}
+
+	return 0;
 }
