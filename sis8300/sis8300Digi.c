@@ -307,7 +307,7 @@ unsigned long dly;
 	rval = (v2 & 0x4) ? Si5326_WidebandMode : Si5326_NarrowbandMode;
 
 	si5326_wr(fd, 0, old_0);
-	us_sleep( 10000 );
+	us_sleep( 200000 );
 
 	return rval;
 }
