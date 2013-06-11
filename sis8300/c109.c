@@ -13,7 +13,7 @@ static void usage(const char *nm)
 	fprintf(stderr,"Usage: %s [-d device] [-S] [-b] [-N nblks] [-4]\n", nm);
 	fprintf(stderr,"           -d device  : use 'device' (path to dev-node)\n");
 	fprintf(stderr,"           -S         : set muxes to use si5326 clock\n");
-	fprintf(stderr,"           -b         : do not bypass 9510 dividers (only if -S)\n");
+	fprintf(stderr,"           -b         : do not bypass 9510 dividers (only if -S in wide-band mode)\n");
 	fprintf(stderr,"           -e         : disable external trigger (enabled by default)\n");
 	fprintf(stderr,"           -N nblks   : number of sample blocks (16samples) per channel\n");
 	fprintf(stderr,"           -4         : use channels 2,4,6,8 only\n");
@@ -46,14 +46,14 @@ Si5326ParmsRec sip_wb = {
 Si5326ParmsRec sip_nb = {
 	/* Use 109MHz clock */
 	fin : 250000000UL,
-	n3  : 1000,
-	/* f3 = 250khz */
-	n2h : 100,
-	n2l : 109*2,
+	n3  : 125,
+	/* f3 = 2Mhz */
+	n2h : 4,
+	n2l : 654,
 	/* fo = 50*109 MHz */
-	n1h : 5,
-	nc  : 10,
-	bw  : 1, /* dspllsim gave us this; no other info available :-( */
+	n1h : 6,
+	nc  : 4,
+	bw  : 5, /* dspllsim gave us this; no other info available :-( */
 	wb  : 0,
 };
 Si5326Parms si5326_clk = 0;
@@ -106,14 +106,17 @@ Si5326Mode         mode;
 			return 1;
 			
 			case Si5326_NoReference:
-				fprintf(stdout,"Sis8300 - no reference detected\n");
+				fprintf(stdout,"Si5326 - no reference detected\n");
 			return 1;
 
 			case Si5326_NarrowbandMode:
 				si5326_clk = &sip_nb;
+				div_clkhl  = 0;
+				fprintf(stdout,"Si5326 - operating in narrow-band mode\n");
 			break;
 			case Si5326_WidebandMode:
 				si5326_clk = &sip_wb;
+				fprintf(stdout,"Si5326 - operating in wide-band mode\n");
 			break;
 		}
 	}
