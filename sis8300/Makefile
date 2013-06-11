@@ -16,6 +16,7 @@ DBD                = sis8300DigiComm.dbd
 PROD_IOC    += c109
 
 c109_SRCS=c109.c sis8300Digi.c
+#c109_SYS_LIBS_Linux+=rt
 
 #===========================
 
