@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <sys/ioctl.h>
+#include <sys/time.h>
 #include <string.h>
 
 #include <sis8300_defs.h>
@@ -19,11 +20,13 @@ typedef Ampl_t Ampl[4];
 
 #define SIS8300_QSPI_REG 0x400
 
+#undef  MEASURE_POLLING
+
 /* Register access primitives */
 static void us_sleep(unsigned us)
 {
 struct timespec t, rem;
-	if ( us > 1000000UL ) {
+	if ( us >= 1000000UL ) {
 		t.tv_sec  = us/1000000UL;
 		t.tv_nsec = (us - t.tv_sec * 1000000UL)*1000UL;
 	} else {
@@ -135,7 +138,7 @@ unsigned o = SIS8300_CLOCK_MULTIPLIER_SPI_REG;
 	 * something in the struck firmware doesn't behave right...
 	 * Maybe fixed in later firmware?
 	 */
-	si5326_xact(rrd_p, fd, o, &v);
+	si5326_xact(rwr_p, fd, o, &v);
 	si5326_xact(rrd_p, fd, o, &v);
 	return v;
 }
@@ -225,29 +228,86 @@ unsigned bypss;
 	ad9510_wr(fd, i, 0x5a, 0x01 ); 
 }
 
+
+#ifdef MEASURE_POLLING
+static unsigned long
+measure_polling(int fd, unsigned msk)
+{
+int i;
+struct timeval then, now;
+
+	gettimeofday( &then, 0 );
+	for ( i=0; i<1000; i++ ) {
+		us_sleep( 1000 );
+		if ( ! (si5326_rd(fd,129) & msk) ) {
+			gettimeofday( &now, 0 );
+			now.tv_sec -= then.tv_sec;
+			if ( now.tv_usec < then.tv_usec ) {
+				now.tv_sec--;
+				now.tv_usec += 1000000UL;
+			}
+			now.tv_usec -= then.tv_usec;
+			return now.tv_sec * 1000 + now.tv_usec/1000;
+		}
+	}
+	return 0;
+}
+#endif
+
 Si5326Mode
 sis8300ClkDetect(int fd)
 {
 Si5326Mode rval;
-uint32_t   old_0;
+uint32_t   old_0,v1,v2;
+#ifdef MEASURE_POLLING
+unsigned long dly;
+#endif
 
 	/* Reset */
 	si5326_wr(fd, 136, 0x80);
-	us_sleep( 1000 );
+
+#ifdef MEASURE_POLLING
+	dly = measure_polling(fd, 1);
+	if ( dly ) {
+		printf("Have ref after %lums\n", dly);
+	}
+#else
+	/* Test reveals that we need to wait at least 102ms!
+	 * until ref-clock is detected.
+	 * 
+	 */
+	us_sleep( 200000 );
+#endif
 
 	/* If there is no reference at all then the device is probably not strapped right */
-	if ( si5326_rd(fd, 129) & 1 )
+	v1 = si5326_rd(fd, 129);
+	if ( (v1 & 1) )
 		return Si5326_NoReference;
 
 	/* If we can switch to free-run mode and see a clock on CLKIN2 then we have
      * a proper reference
 	 */
 	old_0 = si5326_rd(fd, 0);
-	si5326_wr(fd, 0, old_0 & ~0x40);
+	si5326_wr(fd, 0, old_0 | 0x40);
 
-	rval = (si5326_rd(fd, 129) & 0x4) ? Si5326_WidebandMode : Si5326_NarrowbandMode;
+#ifdef MEASURE_POLLING
+	dly = measure_polling(fd, 4);
+	if ( dly ) {
+		printf("Have free-run-ref after %lums\n", dly);
+	}
+#else
+	/* Test reveals that we need to wait at least 103ms
+	 * until ref-clock is detected via free-run!
+	 * 
+	 */
+	us_sleep( 200000 );
+#endif
+
+	v2 = si5326_rd(fd, 129);
+	rval = (v2 & 0x4) ? Si5326_WidebandMode : Si5326_NarrowbandMode;
 
 	si5326_wr(fd, 0, old_0);
+	us_sleep( 10000 );
 
 	return rval;
 }
@@ -349,7 +409,7 @@ unsigned n3max;
 
 	/* Reset */
 	si5326_wr(fd, 136, 0x80);
-	us_sleep( 1000 );
+	us_sleep( 20000 );
 
 	fout = fo/(p->n1h*p->nc);
 
@@ -391,7 +451,7 @@ unsigned n3max;
 
 	si5326_wr(fd, 136, 0x40); /* ICAL */
 
-	us_sleep( 100000 );
+	us_sleep( 500000 );
 	
 	/* Loss of lock or missing reference ? */
 	if ( si5326_rd(fd, 129) & 1 ) {
@@ -413,6 +473,7 @@ int i;
 uint32_t cmd;
 long     fout;
 int      rval = 0;
+unsigned rat;
 
 	/* cannot bypass when we use 250MHz clock */
 	if ( ! si5326_parms && clkhl > 0xffff )
@@ -424,22 +485,30 @@ int      rval = 0;
 		return -1;
 	}
 
-	if ( si5326_parms ) {
-		fout = si5326_setup( fd, si5326_parms );
-		if ( fout < 0 ) {
-			fprintf(stderr,"si5326_setup FAILED\n");
-			return -1;
-		} else {
-			fprintf(stderr,"si5326 clock in use: %ldHz\n", fout);
-		}
-	}
-
 	/* MUX A + B: 3 to select on-board quartz     */
     /* MUX C: 2 or 3 to pass A or B out to SI532x */
     /* MUX D/E: 0 - external quartz / 1 - SI532x  */
 
 	/* Layout: 00 00 ee dd 00 cc bb aa            */
     rwr(fd, SIS8300_CLOCK_DISTRIBUTION_MUX_REG, 0x03f | (si5326_parms ? 0x500 : 0));
+
+	if ( si5326_parms ) {
+		fout = si5326_setup( fd, si5326_parms );
+		if ( fout < 0 ) {
+			fprintf(stderr,"Si5326_setup FAILED\n");
+			return -1;
+		} else {
+			fprintf(stderr,"Si5326 clock in use:   %9ldHz\n", fout);
+		}
+	} else {
+		fout = 250000000;
+		fprintf(stderr,"On-board clock in use: %9ldHz\n", fout);
+	}
+
+	rat = clkhl > 0xff ? 1 : (clkhl & 0xf) + ((clkhl>>4) & 0xf) + 2;
+
+	fprintf(stderr,"AD9510 divider ratio:  %9u\n", rat);
+	fprintf(stderr,"Digitizer clock:       %9ldHz\n", fout/rat);
 
 	for ( i=0; i<5; i++ ) {
 		adc_setup(fd, i);
