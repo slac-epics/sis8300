@@ -50,7 +50,7 @@ Si5326ParmsRec sip_nb = {
 	/* f3 = 2Mhz */
 	n2h : 4,
 	n2l : 654,
-	/* fo = 50*109 MHz */
+	/* fo = 2*109 MHz */
 	n1h : 6,
 	nc  : 4,
 	bw  : 5, /* dspllsim gave us this; no other info available :-( */
