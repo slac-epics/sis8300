@@ -685,3 +685,23 @@ int    fd = (intptr_t)device;
 
 	return 0;
 }
+
+int
+sis8300DigiReadReg(int fd, unsigned reg, uint32_t *val_p)
+{
+sis8300_reg r;
+	r.offset = reg;
+	if ( ioctl(fd, SIS8300_REG_READ, &r) )
+		return -1;
+	*val_p = r.data;	
+	return 0;
+}
+
+int
+sis8300DigiWriteReg(int fd, unsigned reg, uint32_t val)
+{
+sis8300_reg r;
+	r.offset = reg;
+	r.data   = val;
+	return ioctl(fd, SIS8300_REG_WRITE, &r);
+}

@@ -1,6 +1,8 @@
 #ifndef SIS8300DIGI_H
 #define SIS8300DIGI_H
 
+#include <stdint.h>
+
 #define SIS8300_KIND_OFF  (-1)
 #define SIS8300_KIND_BEAM 0
 #define SIS8300_KIND_CRED 1
@@ -72,5 +74,11 @@ sis8300DigiSetSim(int fd, int32_t a, int32_t b, int32_t c, int32_t d, int quiet)
  */
 int 
 sis8300DigiQspiWriteRead(const void *device, int data_out, uint16_t *data_in);
+
+int
+sis8300DigiReadReg(int fd, unsigned reg, uint32_t *val_p);
+
+int
+sis8300DigiWriteReg(int fd, unsigned reg, uint32_t val);
 
 #endif
