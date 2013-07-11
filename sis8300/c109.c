@@ -10,7 +10,9 @@
 
 static void usage(const char *nm)
 {
-	fprintf(stderr,"Usage: %s [-d device] [-S] [-b] [-B] [-N nblks] [-4] [-C] <config>\n", nm);
+	fprintf(stderr,"Usage: %s [-d device] [-qh] [-S] [-b] [-B] [-N nblks] [-4] [-C] <config>\n\n", nm);
+	fprintf(stderr,"           -h         : print this message\n");
+	fprintf(stderr,"           -q         : query Si5236 operating mode only\n");
 	fprintf(stderr,"           -d device  : use 'device' (path to dev-node)\n");
 	fprintf(stderr,"           -S         : set muxes to use si5326 clock\n");
 	fprintf(stderr,"           -b         : do not bypass 9510 dividers (only if -S in wide-band mode)\n");
@@ -106,6 +108,8 @@ int      fd = -1;
 int      nblks = 2;
 int      exttrig = 1;
 int      enf_byp = 0;
+int      query = 0;
+int      do_config = 0;
 int      i;
 unsigned div_clkhl = SIS8300_BYPASS_9510_DIVIDER;
 int      opt;
@@ -118,10 +122,9 @@ Si5326Config       si5326_cfg = 0;
 Sis8300ChannelSel  sel = 0xa987654321ULL;
 Si5326Mode         mode;
 Si5326ParmsRec     parms;
-int      do_config = 0;
 unsigned *pp[6];
 
-	while ( (opt = getopt(argc, argv, "hSbBed:N:4f:C")) > 0 ) {
+	while ( (opt = getopt(argc, argv, "hqSbBed:N:4f:C")) > 0 ) {
 		i_p  = 0;
 		ul_p = 0;
 		switch ( opt ) {
@@ -142,6 +145,7 @@ unsigned *pp[6];
 
 			case 'f': ul_p = &freq; break;
 			case 'C': do_config = 1; break;
+			case 'q': query = 1; break;
 		}
 
 		if ( i_p ) {
@@ -203,7 +207,7 @@ unsigned *pp[6];
 		return 1;
 	}
 
-	if ( freq > 0 || do_config ) {
+	if ( freq > 0 || do_config || query ) {
 		switch ( (mode = sis8300ClkDetect( fd )) ) {
 			default:
 				fprintf(stderr,"Sis8300ClkDetect - unknown result %i\n", mode);
@@ -222,6 +226,11 @@ unsigned *pp[6];
 				si5326_cfg = si5326Configs_wb;
 				parms.wb   = 1;
 			break;
+		}
+
+		if ( query ) {
+			/* query operating mode only */
+			return 0;
 		}
 
 		if ( freq > 0 ) {
