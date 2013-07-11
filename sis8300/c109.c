@@ -10,7 +10,7 @@
 
 static void usage(const char *nm)
 {
-	fprintf(stderr,"Usage: %s [-d device] [-S] [-b] [-B] [-N nblks] [-4]\n", nm);
+	fprintf(stderr,"Usage: %s [-d device] [-S] [-b] [-B] [-N nblks] [-4] [-C] <config>\n", nm);
 	fprintf(stderr,"           -d device  : use 'device' (path to dev-node)\n");
 	fprintf(stderr,"           -S         : set muxes to use si5326 clock\n");
 	fprintf(stderr,"           -b         : do not bypass 9510 dividers (only if -S in wide-band mode)\n");
@@ -21,6 +21,7 @@ static void usage(const char *nm)
 	fprintf(stderr,"           -4         : use channels 2,4,6,8 only\n");
 	fprintf(stderr,"           -f freq    : program Si5326 for output frequency 'freq'\n");
 	fprintf(stderr,"                        (implies -S)\n");
+	fprintf(stderr,"           -C         : read config parameters <n3> <n2h> <n2l> <n1h> <nc> <bw>\n");
 }
 
 typedef struct {
@@ -105,6 +106,7 @@ int      fd = -1;
 int      nblks = 2;
 int      exttrig = 1;
 int      enf_byp = 0;
+int      i;
 unsigned div_clkhl = SIS8300_BYPASS_9510_DIVIDER;
 int      opt;
 const char *dev = getenv("RACC_DEV");
@@ -115,8 +117,11 @@ Si5326Parms        si5326_clk = 0;
 Si5326Config       si5326_cfg = 0;
 Sis8300ChannelSel  sel = 0xa987654321ULL;
 Si5326Mode         mode;
+Si5326ParmsRec     parms;
+int      do_config = 0;
+unsigned *pp[6];
 
-	while ( (opt = getopt(argc, argv, "hSbBed:N:4f:")) > 0 ) {
+	while ( (opt = getopt(argc, argv, "hSbBed:N:4f:C")) > 0 ) {
 		i_p  = 0;
 		ul_p = 0;
 		switch ( opt ) {
@@ -136,6 +141,7 @@ Si5326Mode         mode;
 			case '4': sel = 0x8642ULL; break;
 
 			case 'f': ul_p = &freq; break;
+			case 'C': do_config = 1; break;
 		}
 
 		if ( i_p ) {
@@ -150,6 +156,31 @@ Si5326Mode         mode;
 				return 1;
 			}
 		}
+	}
+
+	if ( do_config ) {
+		if ( freq > 0 ) {
+			fprintf(stderr,"Cannot use both: -C and -f\n");
+			return 1;
+		}
+		if ( optind + 5 > argc ) {
+			fprintf(stderr,"Option -C needs 6 configuration parameters\n");
+			return 1;
+		}
+		pp[0] = &parms.n3;
+		pp[1] = &parms.n2h;
+		pp[2] = &parms.n2l;
+		pp[3] = &parms.n1h;
+		pp[4] = &parms.nc;
+		pp[5] = &parms.bw;
+		for ( i=0; i<6; i++ ) {
+			if ( 1 != sscanf(argv[optind+i], "%u", pp[i]) ) {
+				fprintf(stderr,"Option -C: unable to scan parameter %i\n", i+1);
+				return 1;
+			}
+		}
+		parms.fin = 250000000UL;
+		parms.wb  = 0;
 	}
 
 	if ( !freq )
@@ -172,7 +203,7 @@ Si5326Mode         mode;
 		return 1;
 	}
 
-	if ( freq > 0 ) {
+	if ( freq > 0 || do_config ) {
 		switch ( (mode = sis8300ClkDetect( fd )) ) {
 			default:
 				fprintf(stderr,"Sis8300ClkDetect - unknown result %i\n", mode);
@@ -189,25 +220,32 @@ Si5326Mode         mode;
 			case Si5326_WidebandMode:
 				fprintf(stdout,"Si5326 - operating in wide-band mode\n");
 				si5326_cfg = si5326Configs_wb;
+				parms.wb   = 1;
 			break;
 		}
 
-		for ( ; si5326_cfg->fout > 0; si5326_cfg++ ) {
-			if ( freq == si5326_cfg->fout ) {
-				div_clkhl = SIS8300_BYPASS_9510_DIVIDER;
-				break;
-			} else if ( 2*freq == si5326_cfg->fout ) {
-				div_clkhl = 0;
-				break;
+		if ( freq > 0 ) {
+			for ( ; si5326_cfg->fout > 0; si5326_cfg++ ) {
+				if ( freq == si5326_cfg->fout ) {
+					div_clkhl = SIS8300_BYPASS_9510_DIVIDER;
+					break;
+				} else if ( 2*freq == si5326_cfg->fout ) {
+					div_clkhl = 0;
+					break;
+				}
 			}
+
+			if ( 0 == si5326_cfg->fout ) {
+				fprintf(stderr, "Sorry, no configuration for output frequency %luHz found\n", freq);
+				return 1;
+			}
+
+			si5326_clk = &si5326_cfg->parms;
 		}
 
-		if ( 0 == si5326_cfg->fout ) {
-			fprintf(stderr, "Sorry, no configuration for output frequency %luHz found\n", freq);
-			return 1;
+		if ( do_config ) {
+			si5326_clk = &parms;
 		}
-	
-		si5326_clk = &si5326_cfg->parms;
 	}
 
 	if ( sis8300DigiSetup( fd, si5326_clk, div_clkhl, exttrig ) ) {
