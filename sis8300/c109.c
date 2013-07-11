@@ -10,10 +10,11 @@
 
 static void usage(const char *nm)
 {
-	fprintf(stderr,"Usage: %s [-d device] [-S] [-b] [-N nblks] [-4]\n", nm);
+	fprintf(stderr,"Usage: %s [-d device] [-S] [-b] [-B] [-N nblks] [-4]\n", nm);
 	fprintf(stderr,"           -d device  : use 'device' (path to dev-node)\n");
 	fprintf(stderr,"           -S         : set muxes to use si5326 clock\n");
 	fprintf(stderr,"           -b         : do not bypass 9510 dividers (only if -S in wide-band mode)\n");
+	fprintf(stderr,"           -B         : enforce bypass of 9510 dividers\n");
 	fprintf(stderr,"           -e         : disable external trigger (enabled by default)\n");
 	fprintf(stderr,"           -N nblks   : number of sample blocks (16samples) per channel\n");
 	fprintf(stderr,"                        - defaults to 2.\n");
@@ -103,6 +104,7 @@ int      rval = 1;
 int      fd = -1;
 int      nblks = 2;
 int      exttrig = 1;
+int      enf_byp = 0;
 unsigned div_clkhl = SIS8300_BYPASS_9510_DIVIDER;
 int      opt;
 const char *dev = getenv("RACC_DEV");
@@ -114,7 +116,7 @@ Si5326Config       si5326_cfg = 0;
 Sis8300ChannelSel  sel = 0xa987654321ULL;
 Si5326Mode         mode;
 
-	while ( (opt = getopt(argc, argv, "hSbed:N:4f:")) > 0 ) {
+	while ( (opt = getopt(argc, argv, "hSbBed:N:4f:")) > 0 ) {
 		i_p  = 0;
 		ul_p = 0;
 		switch ( opt ) {
@@ -122,7 +124,8 @@ Si5326Mode         mode;
 			case 'h': usage(argv[0]); return 0;
 
 			case 'S': freq = 109000000UL; break;
-			case 'b': div_clkhl  = 0; break;
+			case 'b': enf_byp    = -1; break;
+			case 'B': enf_byp    =  1; break;
 	
 			case 'd': dev        = optarg; break;
 
@@ -151,6 +154,13 @@ Si5326Mode         mode;
 
 	if ( !freq )
 		div_clkhl = 0;
+
+	switch ( enf_byp ) {
+		default:
+		break;
+		case -1: div_clkhl = 0; break;
+		case +1: div_clkhl = SIS8300_BYPASS_9510_DIVIDER; break;
+	}
 
 	if ( ! dev ) {
 		fprintf(stderr,"No device - use '-d <device>' or set RACC_DEV env_var\n");

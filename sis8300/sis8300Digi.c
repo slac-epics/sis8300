@@ -475,10 +475,6 @@ long     fout;
 int      rval = 0;
 unsigned rat;
 
-	/* cannot bypass when we use 250MHz clock */
-	if ( ! si5326_parms && clkhl > 0xffff )
-		clkhl = 0; /* use divide-by-two */
-
 	/* Assume single-channel buffer logic */
 	if ( (rrd(fd, SIS8300_FIRMWARE_OPTIONS_REG) & 4) ) {
 		fprintf(stderr,"ERROR: firmware does not support single-channel mode\n");
