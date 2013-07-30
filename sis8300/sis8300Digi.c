@@ -12,8 +12,29 @@
 
 #include <sis8300Digi.h>
 
+#include <ratapp.h>
+#include <math.h>
+#include <stdlib.h>
+
+typedef struct Si53xxLim_ {
+	uint32_t f3min;
+	uint32_t f3max;
+	uint64_t fomin;
+	uint64_t fomax;
+	unsigned n1hmin;
+	unsigned n1hmax;
+	unsigned ncmin;
+	unsigned ncmax;
+	unsigned n2hmin;
+	unsigned n2hmax;
+	unsigned n2lmin;
+	unsigned n2lmax;
+	unsigned n3min;
+	unsigned n3max;
+} Si53xxLim;
+
 typedef int32_t Ampl_t;
-typedef Ampl_t Ampl[4];
+typedef Ampl_t  Ampl[4];
 
 /* 4 chars to little-endian 32-bit int */
 #define CHTO32(a,b,c,d)  (((a)<<0) | ((b)<<8) | ((c)<<16) | ((d)<<24))
@@ -312,6 +333,267 @@ unsigned long dly;
 	return rval;
 }
 
+static void
+si53xx_getLims(Si53xxLim *l, int wb)
+{
+	if ( wb ) {
+		l->f3min=  10000000;
+		l->f3max= 157500000;
+		l->fomin=4850000000ULL;
+		l->fomax=5670000000ULL;
+		l->n1hmin=4;
+		l->n1hmax=11;
+		l->ncmin=1;    /* Nc must be even or 1 */
+		l->ncmax=1<<20;
+		l->n2hmin=1;
+		l->n2hmax=1;
+		l->n2lmin=32;	/* N2 must be even */
+		l->n2lmax=512;
+		l->n3min=1;
+		l->n3max=1<<19;
+	} else {
+		l->f3min=      2000;
+		l->f3max=   2000000;
+		l->fomin=4850000000ULL;
+		l->fomax=5670000000ULL;
+		l->n1hmin=4;
+		l->n1hmax=11;
+		l->ncmin=1;      /* Nc must be even or 1 */
+		l->ncmax=1<<20;
+		l->n2hmin=4;
+		l->n2hmax=11;
+		l->n2lmin=2;	  /* N2 must be even */
+		l->n2lmax=1<<20; 
+		l->n3min=1;
+		l->n3max=1<<19;
+	}
+}
+
+static int
+si5326_checkParms(const char *pre, Si5326Parms p, Si53xxLim *l)
+{
+uint64_t fo;
+uint32_t f3;
+
+	if ( p->nc < l->ncmin || p->nc > l->ncmax ) {
+		fprintf(stderr,"%s: NC divider out of range\n", pre);
+		return -1;
+	}
+	if ( p->nc > 1 && (p->nc & 1) ) {
+		fprintf(stderr,"%s: NC divider (%u) must be 1 or even\n", pre, p->nc);
+		return -1;
+	}
+	if ( p->n1h < l->n1hmin || p->n1h > l->n1hmax ) {
+		fprintf(stderr,"%s: N1H divider (%u) out of range\n", pre, p->n1h);
+		return -1;
+	}
+	if ( p->n2l < l->n2lmin || p->n2l > l->n2lmax ) {
+		fprintf(stderr,"%s: N2L divider (%u) out of range\n", pre, p->n2l);
+		return -1;
+	}
+	if ( p->n2l & 1 ) {
+		fprintf(stderr,"%s: N2L divider must be even\n", pre);
+		return -1;
+	}
+	if ( p->n2h < l->n2hmin || p->n2h > l->n2hmax ) {
+		fprintf(stderr,"%s: N2H divider (%u) out of range\n", pre, p->n2h);
+		return -1;
+	}
+	if ( p->n3 < l->n3min || p->n3 > l->n3max ) {
+		fprintf(stderr,"%s: N3 divider (%u) out of range\n", pre, p->n3);
+		return -1;
+	}
+
+	f3 = p->fin/p->n3;
+	if ( f3 < l->f3min || f3 > l->f3max ) {
+		fprintf(stderr,"%s: F3 (%"PRId32") out of range\n", pre, f3);
+		return -1;
+	}
+	fo = ((uint64_t)f3)*p->n2h*p->n2l;
+	if ( fo < l->fomin || fo > l->fomax ) {
+		fprintf(stderr,"%s: Fo (%"PRId64") out of range\n", pre, fo);
+		return -1;
+	}
+
+	return 0;
+}
+
+/* Brute-force factorize a number picking the highest divisor
+ * between div_min and div_max which divides n.
+ *
+ * RETURNS: divisor or 0 if none could be found.
+ */
+static unsigned
+brutefac(unsigned n, unsigned div_min, unsigned div_max)
+{
+	while ( div_max >= div_min ) {
+		if ( 0 == n % div_max )
+			return div_max;
+		div_max--;
+	}
+	return 0;
+}
+
+int
+si53xx_calcParms(uint64_t fout, Si5326Parms p, int verbose)
+{
+	Si53xxLim l;
+	unsigned  n1min, n1max, n1, n1h, n2h, n2l, nc, n3min, v2, v3;
+	Rational  r, ro, r_max, r_arg;
+	Rational  r_n, r_n_max;
+	double    eps = 1.0/0.0, e;
+    Convergent *c = 0;
+	int         n_c, k;
+	RatNum    im_i;
+
+	si53xx_getLims( &l, p->wb );
+
+	if ( ! p->wb && 0 ) {
+		/* Narrow-band not implemented yet */
+		fprintf(stderr,"si53xx_calcParms -- not implemented for narrow-band mode yet\n");
+		return -1;
+	} else {
+		/* Find acceptable range of n1 */
+		n1min = l.fomin / fout;
+		if ( n1min * fout < l.fomin )
+			n1min += 1;
+		n1max = l.fomax / fout;
+
+		if ( n1min < l.n1hmin * l.ncmin )
+			n1min = l.n1hmin * l.ncmin;
+
+		/* Probably not necessary */
+		if ( n1max > l.n1hmax * l.ncmax )
+			n1max = l.n1hmax * l.ncmax;
+
+		r_max.d = p->fin/l.f3min;
+		if ( r_max.d > l.n3max )
+			r_max.d = l.n3max; 
+
+		r_max.n = l.n2hmax*l.n2lmax/2;
+		r_arg.d = p->fin;
+
+	    ro.d = ro.n = 0;
+		p->nc = 0;
+
+		if ( n1min <= l.n1hmax ) {
+			fprintf(stderr,"si53xx_calcParms -- NOTE: case of odd N1 not implemented\n");
+		}
+
+		/* Enforce even-ness of n1 (needs to be even if nc > 1 anyways)
+		 * This way we can easily enforce even-ness of N2. It is unlikely
+		 * to have to handle odd n1 (could happen only for fo/fout <= 11).
+		 */
+		n1min = (n1min + 1) & ~1;
+
+		if ( (n_c = ratapp_estimate_terms( 0, &r_max )) < 0 ) {
+			fprintf(stderr,"si53xx_calcParms -- ratapp_estimate_terms failed\n");
+			return -1;
+		}
+
+		if ( ! (c = malloc( sizeof(*c) * n_c )) ) {
+			fprintf(stderr,"si53xx_calc_parms -- no memory\n");
+			return -1;
+		}
+
+		/* N2 must be even; compute N2_ = N2/2; we know that n1 has to be even, too
+		 * (at least as soon as n1 > n1hmax). Hence we perform all the computations
+		 * for n1/2.
+		 */
+		for ( n1 = n1min/2; n1<=n1max/2; n1++ ) {
+
+			/* Try to find a factorization */
+			ratapp_find_rational( &r, &r_n, &r_n_max );
+			n1h = brutefac( n1, l.n1hmin, l.n1hmax );
+			if ( 0 == n1h )
+				continue;
+
+			nc = n1/n1h;
+
+			r_arg.n = n1 * fout;
+
+			/* Continued fraction expansion of n1 * fout / fin */
+			k = ratapp_find_convergents(c, n_c, &r_arg, &r_max);
+			if ( k < 0 && k>= n_c ) {
+				fprintf(stderr,"ratapp_find_convergents failed (return value %i, n_c %i)\n", k, n_c);
+				free( c );
+				return -1;
+			}
+			/* Find next best approximation */
+			while ( --k >= 0 ) {
+				/* Iterate over intermediates until finding an acceptable one */
+				im_i = c[k+1].a;
+				do {
+					im_i--;
+					im_i = ratapp_intermediate( &r, im_i, &c[k+1], &c[k], &r_arg );
+					/* Check if this one's better... */
+					e = fabs( (double)p->fin * (double)r.n / (double)r.d / (double)n1 - (double)fout );
+					if ( verbose )
+						printf("Checking n1h %u, nc %u, n1 %u, r.n %"PRIu64", r.d %"PRIu64", eps %g", n1h, nc, n1, r.n, r.d, e);
+					if ( e <= eps ) {
+						/* If as good pick the higher n1h but only if N2 can be factorized into legal values  */
+						if (    (e < eps || n1h > p->n1h)
+						     && (n2h = brutefac( r.n, l.n2hmin, l.n2hmax ))
+						     && (n2l = r.n/n2h*2) <= l.n2lmax ) {
+							if ( verbose )
+								printf("  ==> Accepted");
+							ro  = r;
+							eps = e;
+							p->n1h = n1h;
+							p->nc  = 2*nc;
+							p->n2h = n2h;
+
+							/* done */
+							k      = 0;
+							im_i   = 0;
+						}
+					} else {
+						/* end this effort */
+						k    = 0;
+						im_i = 0;
+					}
+					if ( verbose )
+						printf("\n");
+				} while ( im_i > 0 );
+			}
+		}
+		if ( p->nc == 0 ) {
+			/* No allowable N1 found */
+			free ( c );
+			return -1;
+		}
+		p->n3  = ro.d;
+		p->n2l = (ro.n/p->n2h)*2;
+		if ( verbose )
+			printf("Setting N3: %u, n2h %u, n2l %u\n", p->n3, p->n2h, p->n2l);
+
+		/* If f3 is too high or n3 or n2 too small then multiply n3 and n2 by common factor */
+		n3min = (p->fin + l.f3max - 1) / l.f3max;
+		if ( l.n3min > n3min )
+			n3min = l.n3min;
+	    /* n3min .. n3 .. r_max.d; n2min .. n2 .. r_max.n */	
+		v3 = (n3min + p->n3 - 1)/p->n3;
+		v2 = (l.n2lmin + p->n2l - 1) / p->n2l;
+		if ( v2 > v3 )
+			v3 = v2;
+		if ( v3 > 1 ) {
+			/* multiply n3, n2 by the next bigger even number (n2 must be even) */
+			v3 = (v3+1)&~1;
+			if ( verbose )
+				printf("Readjusting by v3 %u\n", v3);
+			p->n3  *= v3;
+			p->n2l *= v3;
+		}
+
+		p->bw  = 2; /* FIXME: Undocumented -- just making a wild guess... */
+
+	}
+
+	free( c );
+
+	return si5326_checkParms("si53xx_calcParms", p, &l);
+}
+
 static int64_t
 si5326_setup(int fd, Si5326Parms p)
 {
@@ -319,93 +601,15 @@ si5326_setup(int fd, Si5326Parms p)
 uint64_t fo, fout;
 uint32_t f3;
 unsigned v;
+Si53xxLim l;
 
-uint32_t f3min;
-uint32_t f3max;
-uint64_t fomin;
-uint64_t fomax;
-unsigned n1hmin;
-unsigned n1hmax;
-unsigned ncmin;
-unsigned ncmax;
-unsigned n2hmin;
-unsigned n2hmax;
-unsigned n2lmin;
-unsigned n2lmax;
-unsigned n3min;
-unsigned n3max;
+	si53xx_getLims( &l, p->wb );
 
-	if ( p->wb ) {
-		f3min=  10000000;
-		f3max= 157500000;
-		fomin=4850000000ULL;
-		fomax=5670000000ULL;
-		n1hmin=4;
-		n1hmax=11;
-		ncmin=1;      /* Nc must be even or 1 */
-		ncmax=1<<20;
-		n2hmin=1;
-		n2hmax=1;
-		n2lmin=32;	/* N2 must be even */
-		n2lmax=566;   /* in principle 1<<9 but fomax/f3min => 566 */
-		n3min=1;
-		n3max=1<<19;
-	} else {
-		f3min=      2000;
-		f3max=   2000000;
-		fomin=4850000000ULL;
-		fomax=5670000000ULL;
-		n1hmin=4;
-		n1hmax=11;
-		ncmin=1;      /* Nc must be even or 1 */
-		ncmax=1<<20;
-		n2hmin=4;
-		n2hmax=11;
-		n2lmin=2;	  /* N2 must be even */
-		n2lmax=1<<20; 
-		n3min=1;
-		n3max=1<<19;
-	}
-
-	if ( p->nc < ncmin || p->nc > ncmax ) {
-		fprintf(stderr,"si5326_setup: NC divider out of range\n");
+	if ( si5326_checkParms( "si5326_setup", p, &l ) )
 		return -1;
-	}
-	if ( p->nc > 1 && (p->nc & 1) ) {
-		fprintf(stderr,"si5326_setup: NC divider must be 1 or even\n");
-		return -1;
-	}
-	if ( p->n1h < n1hmin || p->n1h > n1hmax ) {
-		fprintf(stderr,"si5326_setup: N1H divider out of range\n");
-		return -1;
-	}
-	if ( p->n2l < n2lmin || p->n2l > n2lmax ) {
-		fprintf(stderr,"si5326_setup: N2L divider out of range\n");
-		return -1;
-	}
-	if ( p->n2l & 1 ) {
-		fprintf(stderr,"si5326_setup: N2L divider must be even\n");
-		return -1;
-	}
-	if ( p->n2h < n2hmin || p->n2h > n2hmax ) {
-		fprintf(stderr,"si5326_setup: N2H divider out of range\n");
-		return -1;
-	}
-	if ( p->n3 < n3min || p->n3 > n3max ) {
-		fprintf(stderr,"si5326_setup: N3 divider out of range\n");
-		return -1;
-	}
 
 	f3 = p->fin/p->n3;
-	if ( f3 < f3min || f3 > f3max ) {
-		fprintf(stderr,"si5326_setup: F3 (%"PRId32") out of range\n", f3);
-		return -1;
-	}
 	fo = ((uint64_t)f3)*p->n2h*p->n2l;
-	if ( fo < fomin || fo > fomax ) {
-		fprintf(stderr,"si5326_setup: Fo (%"PRId64") out of range\n", fo);
-		return -1;
-	}
 
 	/* Reset */
 	si5326_wr(fd, 136, 0x80);
@@ -417,7 +621,7 @@ unsigned n3max;
 
 	si5326_wr(fd, 4, 0x92); /* autosel */
 
-	v = p->n1h - n1hmin;
+	v = p->n1h - l.n1hmin;
 	si5326_wr(fd, 25, v<<5 ); /* N1_HS */
 
 	v = p->nc-1;
@@ -434,7 +638,7 @@ unsigned n3max;
 		v = 0xc00000 | p->n2l; /* dspllsim put 0xc0 there */
 	} else {
 		/* narrowband mode needs N2-1 */
-		v = ((p->n2h-n2hmin) << 21) | (p->n2l-1);
+		v = ((p->n2h-l.n2hmin) << 21) | (p->n2l-1);
 	}
 	si5326_wr(fd, 40, (v >> 16) & 0xff );  /* N2 */
 	si5326_wr(fd, 41, (v >>  8) & 0xff );

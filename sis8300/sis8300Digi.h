@@ -25,6 +25,24 @@ typedef enum Si5326Mode_ {
 	Si5326_WidebandMode   = 2
 } Si5326Mode;
 
+/* Try to compute divider configuration for output frequency 'fout'.
+ * Note that 'fout' is the si53xx output frequency may be further
+ * divided by the 9510.
+ *
+ *
+ * NOTE:    The user must set the PLL input frequency (250000000)
+ *          as well as the mode the device is using before calling
+ *          this routine. The 'fout' parameter is in Hz.
+ *
+ * RETURNS: 0 on success, nonzero on error (*p does not contain
+ *          valid settings in this case).
+ *
+ *          On success the 'n3, n2h, n2l, n1h, nc' and 'bw' are
+ *          filled into *p by the routine.
+ */
+int
+si53xx_calcParms(uint64_t fout, Si5326Parms p, int verbose);
+
 /* Probe the 5326 chip to find out if it has a usable narrow-band
  * reference, if it is strapped for wide-band mode or if there is
  * no valid reference (original Sis8300 module had Si5326 strapped
