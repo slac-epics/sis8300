@@ -586,11 +586,13 @@ uint64_t fo;
 uint32_t f3;
 unsigned bw;
 
+#if 0 /* test code */
 int i;
 	for ( i=l->bwselmin; i<l->bwselmax; i++ ) {
 		bw = l->fbw(l, p->fin/p->n3, p->n2h*p->n2l, i);
 		printf("FBW(%i) = %u, BWS(%u) = %i\n", i, bw, bw, l->bws(l, p->fin/p->n3, p->n2h*p->n2l, bw));
 	}
+#endif
 
 	if ( p->nc < l->ncmin || p->nc > l->ncmax ) {
 		fprintf(stderr,"%s: NC divider out of range\n", pre);

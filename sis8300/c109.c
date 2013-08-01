@@ -338,7 +338,7 @@ uint64_t fout, rat;
 			printf("PLL Input  Frequency:  %9luHz\n\n", si5326_clk->fin); 
 			printf("                fin  %-4u*%4u\n", si5326_clk->n2h, si5326_clk->n2l);
 			printf("Divider: fout = ---  ---------\n");
-			printf("                %3u  %-4u*%4u\n\n", si5326_clk->n3, si5326_clk->n1h, si5326_clk->nc);
+			printf("               %4u  %-4u*%4u\n\n", si5326_clk->n3, si5326_clk->n1h, si5326_clk->nc);
 			printf("PLL Bandwidth:         %9uHz\n", si5326_clk->bw);
 			printf("PLL Output Frequency:  %9"PRIu64"Hz\n", fout);
 		} else {
