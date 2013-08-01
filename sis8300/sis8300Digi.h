@@ -14,6 +14,7 @@ typedef struct Si5326Parms_ {
 	unsigned long fin;
 	unsigned n3, n2h, n2l, n1h, nc;
 	unsigned bw;
+	int      bwsel;
 	int      wb;
 } Si5326ParmsRec, *Si5326Parms;
 
@@ -30,15 +31,16 @@ typedef enum Si5326Mode_ {
  * divided by the 9510.
  *
  *
- * NOTE:    The user must set the PLL input frequency (250000000)
- *          as well as the mode the device is using before calling
- *          this routine. The 'fout' parameter is in Hz.
+ * NOTE:    The user must set the PLL input frequency (250000000),
+ *          the desired PLL bandwidth as well as the mode the device is
+ *          using before calling this routine.
+ *          The 'fout' parameter is in Hz.
  *
  * RETURNS: 0 on success, nonzero on error (*p does not contain
  *          valid settings in this case).
  *
- *          On success the 'n3, n2h, n2l, n1h, nc' and 'bw' are
- *          filled into *p by the routine.
+ *          On success the 'n3, n2h, n2l, n1h, nc, bwsel' and
+ *          realizable 'bw' are filled into *p by the routine.
  */
 int
 si53xx_calcParms(uint64_t fout, Si5326Parms p, int verbose);

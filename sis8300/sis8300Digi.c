@@ -1,3 +1,5 @@
+#define _ISOC99_SOURCE
+#include <math.h>
 #include <inttypes.h>
 
 #include <errno.h>
@@ -13,7 +15,6 @@
 #include <sis8300Digi.h>
 
 #include <ratapp.h>
-#include <math.h>
 #include <stdlib.h>
 
 typedef struct Si53xxLim_ {
@@ -31,7 +32,71 @@ typedef struct Si53xxLim_ {
 	unsigned n2lmax;
 	unsigned n3min;
 	unsigned n3max;
+	unsigned bwmin;
+	unsigned bwmax;
+	int      bwselmin;
+	int      bwselmax;
+	unsigned (*fbw)(struct Si53xxLim_ *l, uint32_t f3, unsigned n2, int   bwsel);
+	int      (*bws)(struct Si53xxLim_ *l, uint32_t f3, unsigned n2, unsigned bw);
 } Si53xxLim;
+
+static unsigned
+fbw_wb(Si53xxLim *l, uint32_t f3, unsigned n2, int bwsel);
+static unsigned
+fbw_nb(Si53xxLim *l, uint32_t f3, unsigned n2, int bwsel);
+
+static int
+bws_wb(struct Si53xxLim_ *l, uint32_t f3, unsigned n2, unsigned bw);
+static int
+bws_nb(struct Si53xxLim_ *l, uint32_t f3, unsigned n2, unsigned bw);
+
+static
+Si53xxLim si5325_lim = {
+		f3min:  10000000,
+		f3max: 157500000,
+		fomin:4850000000ULL,
+		fomax:5670000000ULL,
+		n1hmin:4,
+		n1hmax:11,
+		ncmin:1,    /* Nc must be even or 1 */
+		ncmax:1<<20,
+		n2hmin:1,
+		n2hmax:1,
+		n2lmin:32,	/* N2 must be even */
+		n2lmax:512,
+		n3min:1,
+		n3max:1<<19,
+		bwmin: 150000,
+		bwmax:1300000,
+		bwselmin:0, /* bwselmin/bwselmax: private communication from SiLabs */
+		bwselmax:2,
+		fbw : fbw_wb,
+		bws : bws_wb,
+};
+
+static
+Si53xxLim si5326_lim = {
+		f3min:      2000,
+		f3max:   2000000,
+		fomin:4850000000ULL,
+		fomax:5670000000ULL,
+		n1hmin:4,
+		n1hmax:11,
+		ncmin:1,      /* Nc must be even or 1 */
+		ncmax:1<<20,
+		n2hmin:4,
+		n2hmax:11,
+		n2lmin:2,	  /* N2 must be even */
+		n2lmax:1<<20, 
+		n3min:1,
+		n3max:1<<19,
+		bwmin:     60,
+		bwmax:   8400,
+		bwselmin:1, /* bwselmin/bwselmax: private communication from SiLabs */
+		bwselmax:10,
+		fbw : fbw_nb,
+		bws : bws_nb,
+};
 
 typedef int32_t Ampl_t;
 typedef Ampl_t  Ampl[4];
@@ -333,40 +398,185 @@ unsigned long dly;
 	return rval;
 }
 
-static void
-si53xx_getLims(Si53xxLim *l, int wb)
+static Si53xxLim *
+si53xx_getLims(int wb)
 {
-	if ( wb ) {
-		l->f3min=  10000000;
-		l->f3max= 157500000;
-		l->fomin=4850000000ULL;
-		l->fomax=5670000000ULL;
-		l->n1hmin=4;
-		l->n1hmax=11;
-		l->ncmin=1;    /* Nc must be even or 1 */
-		l->ncmax=1<<20;
-		l->n2hmin=1;
-		l->n2hmax=1;
-		l->n2lmin=32;	/* N2 must be even */
-		l->n2lmax=512;
-		l->n3min=1;
-		l->n3max=1<<19;
+	return wb ? &si5325_lim : &si5326_lim;
+}
+
+
+/* Private communication from SiLabs; many thanks! */
+static unsigned
+fbw_nb(Si53xxLim *l, uint32_t f3, unsigned n2, int bwsel)
+{
+double sel,v;
+	if ( bwsel < l->bwselmin || bwsel > l->bwselmax )
+		return 0;
+	sel = (double)(1<<bwsel);
+	v = (double)f3/16.84/sel/sqrt((1.0-1.0/3.35/sel)*(1.0-4276.0/(double)n2/sel));
+	return (unsigned)v;
+}
+
+static unsigned
+fbw_wb(Si53xxLim *l, uint32_t f3, unsigned n2, int bwsel)
+{
+double sel;
+double F;
+double v;
+	if ( bwsel < l->bwselmin || bwsel > l->bwselmax )
+		return 0;
+	sel = (double)(bwsel+1);
+	F = 6.5E9/(double)f3/(double)n2;
+	v = (double)f3*1.235/101.235/sel/sqrt(1.0-0.095/sel)*F*F;
+	return (unsigned) v;
+}
+
+static int
+bws_nb(struct Si53xxLim_ *l, uint32_t f3, unsigned n2, unsigned bw)
+{
+double d,A,B,C,p,s;
+int    bwsel;
+/*
+	a=f3/16.84, B=1/3.35, C=4276/N2, p=2^(-BWSEL)
+
+	bw=a*p/sqrt{(1-B*p)(1-C*p)}
+
+	A = a/bw = f3/bw/16.84
+    
+    (A*p)^2 = 1-(B+C)p+B*C*p^2 
+
+    p^2 (B*C-A^2) -(B+C) p + 1 == 0
+
+    p = (B+C +/- sqrt((B+C)^2-4 (B*C-A^2) ) / 2 / (B*C-A^2)
+
+	roots of A^2 p^2 - BC p^2 + (B+C)p - 1 = 0
+
+    Root locus plot as a function of A^2
+
+
+    'Open-loop': BC p^2 - (B+C)p + 1 = 0 
+        p1/2 = { (B+C)+/-sqrt((B+C)^2-4BC) } /2/BC =>
+		p1 = 1/B, b2=1/C	
+
+
+     if C > B (4276/n2 > 1/3.35)
+                |               
+                |              
+                |                  3.35                  
+     -----------O<======X----------X========>
+                       1/C        1/B
+
+     If C < B
+                |               
+                |              
+                |      3.35        
+     -----------O<======X----------X========>
+                       1/B        1/C
+
+	 In any case: only ONE solution can be smaller than 1
+
+ */
+	if ( bw < l->bwmin )
+		bw = l->bwmin;
+	if ( bw > l->bwmax )
+		bw = l->bwmax;
+	A=(double)f3/(double)bw/16.84;
+	B=1.0/3.35;
+	C=4276.0/(double)n2;
+	d=B*C-A*A;
+	if ( 0.0 == d ) {
+		p = 1.0/(B+C);
 	} else {
-		l->f3min=      2000;
-		l->f3max=   2000000;
-		l->fomin=4850000000ULL;
-		l->fomax=5670000000ULL;
-		l->n1hmin=4;
-		l->n1hmax=11;
-		l->ncmin=1;      /* Nc must be even or 1 */
-		l->ncmax=1<<20;
-		l->n2hmin=4;
-		l->n2hmax=11;
-		l->n2lmin=2;	  /* N2 must be even */
-		l->n2lmax=1<<20; 
-		l->n3min=1;
-		l->n3max=1<<19;
+		/* (B+C)^2-4*B*C + 4*A^2 = (B-C)^2 + 4 A^2 > 0 */
+		s = B+C;
+		s = sqrt(s*s - 4.0*d);
+		if ( d < 0 ) {
+			/* sqrt() > B+D; positive p can only be achieved
+			 * for the negative sign.
+			 */
+			p = (B+C-s)/2./d;
+		} else {
+			/* we pick smaller solution */
+			p = (B+C-s)/2./d;
+		}
 	}
+	bwsel = -(int)round(log(p)/log(2.0));
+
+	if ( bwsel < l->bwselmin )
+		bwsel = l->bwselmin;
+	if ( bwsel > l->bwselmax )
+		bwsel = l->bwselmax;
+	
+	while ( l->fbw(l, f3, n2, bwsel) < l->bwmin ) {
+		if ( --bwsel < l->bwselmin )
+			return -1;
+	}
+
+	while ( l->fbw(l, f3, n2, bwsel) > l->bwmax ) {
+		if ( ++bwsel > l->bwselmax )
+			return -1;
+	}
+
+	return bwsel;
+}
+
+static int
+bws_wb(struct Si53xxLim_ *l, uint32_t f3, unsigned n2, unsigned bw)
+{
+double A,B,p;
+int    bwsel;
+/*
+	a = f3*1.235/101.235)*(6.5E9/f3/N2)^2
+    A = a/bw
+	B = 0.095
+    p = bwsel + 1
+
+    bw = a/p/sqrt(1-B/p) 
+
+	(A/p)^2 = 1 - B/p 
+
+	A^2 + Bp - p^2 = 0
+
+    { -B +/- sqrt(B^2+4 A^2) } /2/(-1)
+
+    1/2 {B-/+sqrt(B^2+4*A^2)}
+
+    for p >=1 take + sign
+ */
+	if ( bw < l->bwmin )
+		bw = l->bwmin;
+	if ( bw > l->bwmax )
+		bw = l->bwmax;
+
+	A=6.5E9*(double)f3/(double)n2;
+	A=(double)f3*1.235/101.235*A*A/(double)bw;
+	B=0.095;
+	p=0.5*(B+sqrt(B*B+4.0*A*A));
+	bwsel = (int)round(p) - 1;
+
+	if ( bwsel < l->bwselmin )
+		bwsel = l->bwselmin;
+	if ( bwsel > l->bwselmax )
+		bwsel = l->bwselmax;
+	
+	while ( l->fbw(l, f3, n2, bwsel) < l->bwmin ) {
+		if ( --bwsel < l->bwselmin )
+			return -1;
+	}
+
+	while ( l->fbw(l, f3, n2, bwsel) > l->bwmax ) {
+		if ( ++bwsel > l->bwselmax )
+			return -1;
+	}
+
+	return bwsel;
+}
+
+
+static unsigned
+fbw(Si53xxLim *l, Si5326Parms p)
+{
+	return l->fbw(l, p->fin/p->n3, p->n2h*p->n2l, p->bwsel);
 }
 
 static int
@@ -374,6 +584,13 @@ si5326_checkParms(const char *pre, Si5326Parms p, Si53xxLim *l)
 {
 uint64_t fo;
 uint32_t f3;
+unsigned bw;
+
+int i;
+	for ( i=l->bwselmin; i<l->bwselmax; i++ ) {
+		bw = l->fbw(l, p->fin/p->n3, p->n2h*p->n2l, i);
+		printf("FBW(%i) = %u, BWS(%u) = %i\n", i, bw, bw, l->bws(l, p->fin/p->n3, p->n2h*p->n2l, bw));
+	}
 
 	if ( p->nc < l->ncmin || p->nc > l->ncmax ) {
 		fprintf(stderr,"%s: NC divider out of range\n", pre);
@@ -415,6 +632,18 @@ uint32_t f3;
 		return -1;
 	}
 
+	if ( p->bwsel < l->bwselmin || p->bwsel > l->bwselmax ) {
+		fprintf(stderr,"%s: BWSEL (%i) out of range\n", pre, p->bwsel);
+		return -1;
+	}
+
+	bw = fbw(l,p);
+
+	if ( bw < l->bwmin || bw > l->bwmax ) {
+		fprintf(stderr,"%s: PLL bandwidth (%d) out of range\n", pre, bw);
+		return -1;
+	}
+
 	return 0;
 }
 
@@ -437,41 +666,40 @@ brutefac(unsigned n, unsigned div_min, unsigned div_max)
 int
 si53xx_calcParms(uint64_t fout, Si5326Parms p, int verbose)
 {
-Si53xxLim   l;
+Si53xxLim   *l;
 unsigned    n1min, n1max, n1, n1h, n2h, n2l, nc, n3min, v2, v3;
 Rational    r, ro, r_max, r_arg;
-Rational    r_n, r_n_max;
 double      eps = 1.0/0.0, e;
 Convergent *c = 0;
 int         n_c, k;
 RatNum      im_i;
 
-	si53xx_getLims( &l, p->wb );
+	l = si53xx_getLims( p->wb );
 
 	/* Find acceptable range of n1 */
-	n1min = l.fomin / fout;
-	if ( n1min * fout < l.fomin )
+	n1min = l->fomin / fout;
+	if ( n1min * fout < l->fomin )
 		n1min += 1;
-	n1max = l.fomax / fout;
+	n1max = l->fomax / fout;
 
-	if ( n1min < l.n1hmin * l.ncmin )
-		n1min = l.n1hmin * l.ncmin;
+	if ( n1min < l->n1hmin * l->ncmin )
+		n1min = l->n1hmin * l->ncmin;
 
 	/* Probably not necessary */
-	if ( n1max > l.n1hmax * l.ncmax )
-		n1max = l.n1hmax * l.ncmax;
+	if ( n1max > l->n1hmax * l->ncmax )
+		n1max = l->n1hmax * l->ncmax;
 
-	r_max.d = p->fin/l.f3min;
-	if ( r_max.d > l.n3max )
-		r_max.d = l.n3max; 
+	r_max.d = p->fin/l->f3min;
+	if ( r_max.d > l->n3max )
+		r_max.d = l->n3max; 
 
-	r_max.n = l.n2hmax*l.n2lmax/2;
+	r_max.n = l->n2hmax*l->n2lmax/2;
 	r_arg.d = p->fin;
 
 	ro.d = ro.n = 0;
 	p->nc = 0;
 
-	if ( n1min <= l.n1hmax ) {
+	if ( n1min <= l->n1hmax ) {
 		fprintf(stderr,"si53xx_calcParms -- NOTE: case of odd N1 not implemented\n");
 	}
 
@@ -498,8 +726,7 @@ RatNum      im_i;
 	for ( n1 = n1min/2; n1<=n1max/2; n1++ ) {
 
 		/* Try to find a factorization */
-		ratapp_find_rational( &r, &r_n, &r_n_max );
-		n1h = brutefac( n1, l.n1hmin, l.n1hmax );
+		n1h = brutefac( n1, l->n1hmin, l->n1hmax );
 		if ( 0 == n1h )
 			continue;
 
@@ -528,8 +755,8 @@ RatNum      im_i;
 				if ( e <= eps ) {
 					/* If as good pick the higher n1h but only if N2 can be factorized into legal values  */
 					if (    (e < eps || n1h > p->n1h)
-							&& (n2h = brutefac( r.n, l.n2hmin, l.n2hmax ))
-							&& (n2l = r.n/n2h*2) <= l.n2lmax ) {
+							&& (n2h = brutefac( r.n, l->n2hmin, l->n2hmax ))
+							&& (n2l = r.n/n2h*2) <= l->n2lmax ) {
 						if ( verbose )
 							printf("  ==> Accepted");
 						ro  = r;
@@ -552,9 +779,11 @@ RatNum      im_i;
 			} while ( im_i > 0 );
 		}
 	}
+
+	free( c );
+
 	if ( p->nc == 0 ) {
 		/* No allowable N1 found */
-		free ( c );
 		return -1;
 	}
 	p->n3  = ro.d;
@@ -563,12 +792,12 @@ RatNum      im_i;
 		printf("Setting N3: %u, n2h %u, n2l %u\n", p->n3, p->n2h, p->n2l);
 
 	/* If f3 is too high or n3 or n2 too small then multiply n3 and n2 by common factor */
-	n3min = (p->fin + l.f3max - 1) / l.f3max;
-	if ( l.n3min > n3min )
-		n3min = l.n3min;
+	n3min = (p->fin + l->f3max - 1) / l->f3max;
+	if ( l->n3min > n3min )
+		n3min = l->n3min;
 	/* n3min .. n3 .. r_max.d; n2min .. n2 .. r_max.n */	
 	v3 = (n3min + p->n3 - 1)/p->n3;
-	v2 = (l.n2lmin + p->n2l - 1) / p->n2l;
+	v2 = (l->n2lmin + p->n2l - 1) / p->n2l;
 	if ( v2 > v3 )
 		v3 = v2;
 	if ( v3 > 1 ) {
@@ -580,26 +809,35 @@ RatNum      im_i;
 		p->n2l *= v3;
 	}
 
-	p->bw  = 2; /* FIXME: Undocumented -- just making a wild guess... */
+	/* Compute bandwidth selector from user input */
+	p->bwsel = l->bws( l, p->fin/p->n3, p->n2h*p->n2l, p->bw );
 
-	free( c );
+	if ( p->bwsel < 0 ) {
+		fprintf(stderr,"Unable to find valid PLL bandwidth setting\n");
+		return -1;
+	}
 
-	return si5326_checkParms("si53xx_calcParms", p, &l);
+	/* Adjust p->bw to reflect true bandwidth */
+	p->bw = fbw( l, p );
+
+	return si5326_checkParms("si53xx_calcParms", p, l);
 }
-
+    
 static int64_t
 si5326_setup(int fd, Si5326Parms p)
 {
-/* Wideband device constraints */
 uint64_t fo, fout;
 uint32_t f3;
 unsigned v;
-Si53xxLim l;
+Si53xxLim *l;
 
-	si53xx_getLims( &l, p->wb );
+	l = si53xx_getLims( p->wb );
 
-	if ( si5326_checkParms( "si5326_setup", p, &l ) )
+	if ( si5326_checkParms( "si5326_setup", p, l ) )
 		return -1;
+
+	/* Compute bandwidth and store for informational purposes */
+	p->bw = fbw(l, p);
 
 	f3 = p->fin/p->n3;
 	fo = ((uint64_t)f3)*p->n2h*p->n2l;
@@ -610,11 +848,11 @@ Si53xxLim l;
 
 	fout = fo/(p->n1h*p->nc);
 
-	si5326_wr(fd, 2, ((p->bw & 0xf)<<4) | 0x2);
+	si5326_wr(fd, 2, ((p->bwsel & 0xf)<<4) | 0x2);
 
 	si5326_wr(fd, 4, 0x92); /* autosel */
 
-	v = p->n1h - l.n1hmin;
+	v = p->n1h - l->n1hmin;
 	si5326_wr(fd, 25, v<<5 ); /* N1_HS */
 
 	v = p->nc-1;
@@ -631,7 +869,7 @@ Si53xxLim l;
 		v = 0xc00000 | p->n2l; /* dspllsim put 0xc0 there */
 	} else {
 		/* narrowband mode needs N2-1 */
-		v = ((p->n2h-l.n2hmin) << 21) | (p->n2l-1);
+		v = ((p->n2h-l->n2hmin) << 21) | (p->n2l-1);
 	}
 	si5326_wr(fd, 40, (v >> 16) & 0xff );  /* N2 */
 	si5326_wr(fd, 41, (v >>  8) & 0xff );

@@ -11,7 +11,7 @@
 
 static void usage(const char *nm)
 {
-	fprintf(stderr,"Usage: %s [-d device] [-qh] [-S] [-b] [-B] [-N nblks] [-4] [-T W|N] [-C] <config>\n\n", nm);
+	fprintf(stderr,"Usage: %s [-d device] [-f freq] [-L loop_bandwidth] [-qh] [-S] [-b] [-B] [-N nblks] [-4] [-T W|N] [-C] <config>\n\n", nm);
 	fprintf(stderr,"           -h         : print this message\n");
 	fprintf(stderr,"           -q         : query Si5236 operating mode only\n");
 	fprintf(stderr,"           -d device  : use 'device' (path to dev-node)\n");
@@ -27,7 +27,8 @@ static void usage(const char *nm)
 	fprintf(stderr,"           -T W|N     : only compute divider settings w/o accessing the device.\n");
 	fprintf(stderr,"                        Requires '-f'. The user must specify the device mode\n");
 	fprintf(stderr,"                        ('W'ide- or 'N'arrow-band).\n");
-	fprintf(stderr,"           -C         : read config parameters <n3> <n2h> <n2l> <n1h> <nc> <bw>\n");
+	fprintf(stderr,"           -L bw      : Set PLL loop bandwidth\n");
+	fprintf(stderr,"           -C         : read config parameters <n3> <n2h> <n2l> <n1h> <nc> <bwsel>\n");
 	fprintf(stderr,"           -I         : ignore fixed, hard-configured configurations\n");
 	fprintf(stderr,"           -v         : be verbose\n");
 }
@@ -49,16 +50,16 @@ static Si5326ConfigRec si5326Configs_wb[] = {
 	fout: 109000000UL,
 	parms:
 	{
-	  fin : 250000000UL,
-	  n3  : 10,
+	  fin  : 250000000UL,
+	  n3   : 10,
 	  /* f3 = 25Mhz */
-	  n2h : 1,
-	  n2l : 109*2,
+	  n2h  : 1,
+	  n2l  : 109*2,
 	  /* fo = 50*109 MHz */
-	  n1h : 5,
-	  nc  : 10,
-	  bw  : 1, /* dspllsim gave us this; no other info available :-( */
-	  wb  : 1,
+	  n1h  : 5,
+	  nc   : 10,
+	  bwsel: 1,
+	  wb   : 1,
 	}
 	},
 
@@ -66,15 +67,15 @@ static Si5326ConfigRec si5326Configs_wb[] = {
 	fout: 500000000UL,
 	parms:
 	{
-	  fin : 250000000UL,
-	  n3  : 2,
+	  fin  : 250000000UL,
+	  n3   : 2,
 	  /* f3 = 125Mhz */
-	  n2h : 1,
-	  n2l : 44,
+	  n2h  : 1,
+	  n2l  : 44,
 	  /* fo = 44*125 MHz */
-	  n1h : 11,
-	  nc  : 1,
-	  bw  : 2, /* dspllsim gave us this; no other info available :-( */
+	  n1h  : 11,
+	  nc   : 1,
+	  bwsel: 2,
 	  wb  : 1,
 	}
 	},
@@ -92,16 +93,16 @@ static Si5326ConfigRec si5326Configs_nb[] = {
 	fout: 109000000UL,
 	parms:
 	{
-	  fin : 250000000UL,
-	  n3  : 125,
+	  fin  : 250000000UL,
+	  n3   : 125,
 	  /* f3 = 2Mhz */
-	  n2h : 4,
-	  n2l : 654,
+	  n2h  : 4,
+	  n2l  : 654,
 	  /* fo = 2*109 MHz */
-	  n1h : 6,
-	  nc  : 4,
-	  bw  : 5, /* dspllsim gave us this; no other info available :-( */
-	  wb  : 0,
+	  n1h  : 6,
+	  nc   : 4,
+	  bwsel: 5,
+	  wb   : 0,
 	}
 	},
 
@@ -132,6 +133,7 @@ const char *dev = getenv("RACC_DEV");
 int      *i_p;
 unsigned long *ul_p;
 unsigned long freq = 0;
+int      bw=0;
 Si5326Parms        si5326_clk = 0;
 Si5326Config       si5326_cfg = 0;
 Sis8300ChannelSel  sel = 0xa987654321ULL;
@@ -140,7 +142,7 @@ Si5326ParmsRec     parms;
 unsigned *pp[6];
 uint64_t fout, rat;
 
-	while ( (opt = getopt(argc, argv, "hqSbBed:N:4f:CT:Iv")) > 0 ) {
+	while ( (opt = getopt(argc, argv, "hqSbBed:N:4f:CT:IvL:")) > 0 ) {
 		i_p  = 0;
 		ul_p = 0;
 		switch ( opt ) {
@@ -171,6 +173,8 @@ uint64_t fout, rat;
 					  }
 			          break;
 
+			case 'L': i_p = &bw; break;
+
 			case 'I': ignore_fixed = 1; break;
 		}
 
@@ -188,7 +192,10 @@ uint64_t fout, rat;
 		}
 	}
 
+	parms.bw = bw;
+
 	if ( do_config ) {
+		unsigned bwsel;
 		if ( Si5326_Error != mode ) {
 			fprintf(stderr,"Cannot use both: -C and -T\n");
 			return 1;
@@ -206,15 +213,16 @@ uint64_t fout, rat;
 		pp[2] = &parms.n2l;
 		pp[3] = &parms.n1h;
 		pp[4] = &parms.nc;
-		pp[5] = &parms.bw;
+		pp[5] = &bwsel;
 		for ( i=0; i<6; i++ ) {
 			if ( 1 != sscanf(argv[optind+i], "%u", pp[i]) ) {
 				fprintf(stderr,"Option -C: unable to scan parameter %i\n", i+1);
 				return 1;
 			}
 		}
-		parms.fin = 250000000UL;
-		parms.wb  = 0;
+		parms.bwsel = (int)bwsel;
+		parms.fin   = 250000000UL;
+		parms.wb    = 0;
 	}
 
 	if ( !freq )
@@ -322,14 +330,21 @@ uint64_t fout, rat;
 			fprintf(stderr,"Setting sample count failed\n");
 		}
 
-	} else {
-		fout = (uint64_t)si5326_clk->fin * (uint64_t)si5326_clk->n2h * (uint64_t)si5326_clk->n2l;
-		fout /= (uint64_t)si5326_clk->n3 * (uint64_t)si5326_clk->n1h * (uint64_t)si5326_clk->nc;
-		printf("PLL Input  Frequency:  %9luHz\n\n", si5326_clk->fin); 
-		printf("                fin  %-4u*%4u\n", si5326_clk->n2h, si5326_clk->n2l);
-		printf("Divider: fout = ---  ---------\n");
-		printf("                %3u  %-4u*%4u\n\n", si5326_clk->n3, si5326_clk->n1h, si5326_clk->nc);
-		printf("PLL Output Frequency:  %9"PRIu64"Hz\n", fout);
+	}
+	if ( verbose || fd < 0 ) {
+		if ( si5326_clk ) {
+			fout = (uint64_t)si5326_clk->fin * (uint64_t)si5326_clk->n2h * (uint64_t)si5326_clk->n2l;
+			fout /= (uint64_t)si5326_clk->n3 * (uint64_t)si5326_clk->n1h * (uint64_t)si5326_clk->nc;
+			printf("PLL Input  Frequency:  %9luHz\n\n", si5326_clk->fin); 
+			printf("                fin  %-4u*%4u\n", si5326_clk->n2h, si5326_clk->n2l);
+			printf("Divider: fout = ---  ---------\n");
+			printf("                %3u  %-4u*%4u\n\n", si5326_clk->n3, si5326_clk->n1h, si5326_clk->nc);
+			printf("PLL Bandwidth:         %9uHz\n", si5326_clk->bw);
+			printf("PLL Output Frequency:  %9"PRIu64"Hz\n", fout);
+		} else {
+			fout = 250000000ULL;
+			printf("PLL Bypassed; Output Frequency %9"PRIu64"Hz\n", fout);
+		}
         rat = div_clkhl > 0xff ? 1 : (div_clkhl & 0xf) + ((div_clkhl>>4) & 0xf) + 2;
 		printf("AD9510 divider ratio:  %9"PRIu64"\n", rat);
 		printf("Digitizer clock:       %9"PRIu64"Hz\n", fout/rat);
