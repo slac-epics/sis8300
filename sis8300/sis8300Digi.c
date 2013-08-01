@@ -901,12 +901,26 @@ Si53xxLim *l;
 	return fout;
 }
 
+static unsigned
+sis8300_tap_delay(unsigned long adc_clk)
+{
+	/* This is most likely incomplete; I only have an email from Tino saying
+	 * "I believe for a 250MHz clock it is 11, below 125MHz it is always 0".
+	 */
+	return adc_clk > 125000000UL ? 11 : 0;
+}
+
+/* Mask selecting all ADC pairs */
+#define SIS8300_TAP_DELAY_ALL_ADCS  0x1f00
+#define SIS8300_TAP_DELAY_BUSY     (1<<31)
+
 int
 sis8300DigiSetup(int fd, Si5326Parms si5326_parms, unsigned clkhl, int exttrig)
 {
 int i;
 uint32_t cmd;
 long     fout;
+unsigned long fclk;
 int      rval = 0;
 unsigned rat;
 
@@ -938,8 +952,19 @@ unsigned rat;
 
 	rat = clkhl > 0xff ? 1 : (clkhl & 0xf) + ((clkhl>>4) & 0xf) + 2;
 
+	fclk = fout/rat;
+
 	fprintf(stderr,"AD9510 divider ratio:  %9u\n", rat);
-	fprintf(stderr,"Digitizer clock:       %9ldHz\n", fout/rat);
+	fprintf(stderr,"Digitizer clock:       %9ldHz\n", fclk);
+
+	/* Set infamous ADC tap delay */
+	rwr(fd, SIS8300_ADC_INPUT_TAP_DELAY_REG, SIS8300_TAP_DELAY_ALL_ADCS | sis8300_tap_delay( fclk ));
+	/* Busy-wait */
+	for ( i=0; i<100000; i++ ) {
+		if ( ( rrd(fd, SIS8300_ADC_INPUT_TAP_DELAY_REG) & SIS8300_TAP_DELAY_BUSY ) ) {
+			break;
+		}
+	}
 
 	for ( i=0; i<5; i++ ) {
 		adc_setup(fd, i);
