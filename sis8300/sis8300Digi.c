@@ -251,6 +251,9 @@ adc_setup(int fd, unsigned inst)
 	adc_wr( fd, inst, 0x16, 0x00 );
 	adc_wr( fd, inst, 0x17, 0x00 );
 
+	/* VREF for 1.25Vpp input sensitivity */
+	adc_wr( fd, inst, 0x18, 0x00 );
+
 	/* update cmd */
 	adc_wr( fd, inst, 0xff, 0x01 );
 }
