@@ -175,6 +175,22 @@ uint32_t cmd;
 	us_sleep(1);
 }
 
+#define CMD_ADC_SPI_READ (1<<23)
+
+static int
+adc_rd(int fd, unsigned inst, unsigned a)
+{
+uint32_t cmd;
+
+	if ( inst > 4 )
+		return -1;
+
+	cmd = inst << 24;
+	cmd |= ( (a&0xff)<<8 ) | CMD_ADC_SPI_READ;
+
+	rwr(fd, SIS8300_ADC_SPI_REG, cmd);
+	return (int) (rrd(fd, SIS8300_ADC_SPI_REG) & 0xff);
+}
 /* AD9510 access primitives */
 static void
 ad9510_wr(int fd, unsigned inst, unsigned a, unsigned v)
@@ -239,6 +255,31 @@ unsigned o = SIS8300_CLOCK_MULTIPLIER_SPI_REG;
 	/* write register command */
 	v = 0x4000 | (val & 0xff);
 	si5326_xact(rwr_p, fd, o, &v);
+}
+
+static int is_8_channel_firmware(int fd)
+{
+	/* firmware 0x2402 and up are 8-channel @250msps */
+	return (rrd( fd, SIS8300_IDENTIFIER_VERSION_REG) & 0xff00) >= 0x2400;
+}
+
+	/* If we have a 14-bit digitizer with firmware >= 2402 then we can adjust the 14 bits
+     * so that the digitizer produces numbers on the same scale as its 16-bit counterpart.
+	 */
+static void shift_adc_bits(int fd) 
+{
+	if ( (rrd( fd, SIS8300_IDENTIFIER_VERSION_REG) & 0xffff) < 0x2402 )
+		return;
+
+	/* Get ADC chip ID 0x82 : AD9643; 0x32: AD9268 */
+	if ( adc_rd( fd, 0, 0x01 ) != 0x82 )
+		return;
+
+	/* OK we have the right firmware and a device which deserves shifting... */
+	uint32_t v = rrd(fd, SIS8300_USER_CONTROL_STATUS_REG);
+	v &= ~0x30;
+	v |=  0x10; /* MODE 1 - left-adjust 14-bits into 16-bit word */
+	rwr(fd, SIS8300_USER_CONTROL_STATUS_REG, v);
 }
 
 /* Setup of ADC */
@@ -909,10 +950,14 @@ Si53xxLim *l;
 static unsigned
 sis8300_tap_delay(unsigned long adc_clk)
 {
-	/* This is most likely incomplete; I only have an email from Tino saying
-	 * "I believe for a 250MHz clock it is 11, below 125MHz it is always 0".
+	/* SIS8300-M-2403-1-V101-250MSPS_addendum:
+     * Tap delay 0  should work for clocks 40Mhz..160MHz.
+	 * Tap delay 11 for 40MHz..250MHz. 
+     * Maintain the switchover so that we dont inadvertently 
+	 * mess something up that has been proven to work with the
+	 * 125MSPS digi...
 	 */
-	return adc_clk > 125000000UL ? 11 : 0;
+	return adc_clk > 130000000UL ? 11 : 0;
 }
 
 /* Mask selecting all ADC pairs */
@@ -971,9 +1016,11 @@ unsigned rat;
 		}
 	}
 
-	for ( i=0; i<5; i++ ) {
+	for ( i=0; i< is_8_channel_firmware( fd ) ? 4 : 5; i++ ) {
 		adc_setup(fd, i);
 	}
+
+	shift_adc_bits( fd );
 
 	/* 9510 Setup */
 	ad9510_setup(fd, 0, clkhl);
@@ -1085,6 +1132,10 @@ uint32_t cmd;
 		ch--;
 		rwr(fd, SIS8300_SAMPLE_START_ADDRESS_CH1_REG + ch, n);
 		cmd &= ~(1<<ch);
+	}
+
+	if ( is_8_channel_firmware(fd) ) {
+		cmd |= 0x300;
 	}
 	rwr(fd, SIS8300_SAMPLE_CONTROL_REG, cmd);
 	return 0;
