@@ -1126,7 +1126,13 @@ uint32_t cmd;
 	rwr(fd, SIS8300_SAMPLE_LENGTH_REG,    nblks - 1);
 
 	cmd  = rrd(fd, SIS8300_SAMPLE_CONTROL_REG);
-	cmd |= 0x3ff;
+	cmd |= 0x0ff;
+
+	if ( is_8_channel_firmware(fd) ) {
+		cmd |= 0x300;
+	} else {
+		cmd &= ~0x300;
+	}
 	/* Sample to contiguous memory area */
 	for ( n=0; (ch = (channel_selector & 0xf)); n+=nblks, channel_selector >>= 4 ) {
 		ch--;
@@ -1134,9 +1140,6 @@ uint32_t cmd;
 		cmd &= ~(1<<ch);
 	}
 
-	if ( is_8_channel_firmware(fd) ) {
-		cmd |= 0x300;
-	}
 	rwr(fd, SIS8300_SAMPLE_CONTROL_REG, cmd);
 	return 0;
 }
