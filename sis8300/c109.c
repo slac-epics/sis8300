@@ -89,8 +89,8 @@ static Si5326ConfigRec si5326Configs_wb[] = {
 };
 
 static Si5326ConfigRec si5326Configs_nb[] = {
-	{ /* 109MHz narrow-band */
-	fout: 109000000UL,
+	{ /* 218MHz narrow-band */
+	fout: 218000000UL,
 	parms:
 	{
 	  fin  : 250000000UL,
