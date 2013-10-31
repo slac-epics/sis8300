@@ -975,7 +975,7 @@ int      rval = 0;
 unsigned rat;
 
 	/* Assume single-channel buffer logic */
-	if ( (rrd(fd, SIS8300_FIRMWARE_OPTIONS_REG) & 4) ) {
+	if ( (rrd(fd, SIS8300_FIRMWARE_OPTIONS_REG) & SIS8300_DUAL_CHANNEL_SAMPLING) ) {
 		fprintf(stderr,"ERROR: firmware does not support single-channel mode\n");
 		return -1;
 	}
@@ -1076,13 +1076,27 @@ int cmd;
 	return ioctl(fd, SIS8300_READ_MODE, &cmd);
 }
 
+Sis8300ChannelSel
+sis8300BuildChannelSel(unsigned start, unsigned end)
+{
+Sis8300ChannelSel rval = 0;
+int               shft;
+
+	if ( start > 0 ) {
+		for ( shft=0; start <= end; start++, (shft+=4) ) {
+			rval |= (start << shft);	
+		}
+	}
+	return rval;
+}
+
 int
 sis8300DigiValidateSel(Sis8300ChannelSel sel)
 {
 int               i,j,n,k;
 Sis8300ChannelSel s,t;
 
-	for ( i=0, s=sel; (n = s & 0xf); ) {
+	for ( i=0, s=sel; 0 != (n = ( s & 0xf ) ); ) {
 		if ( n > 10 ) {
 			fprintf(stderr,"channel # %i in selector pos %i too big (1..10)\n", n, i);
 			return -1;

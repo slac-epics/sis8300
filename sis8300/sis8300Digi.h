@@ -71,6 +71,17 @@ sis8300DigiSetup(int fd, Si5326Parms si5326_parms, unsigned clkhl, int exttrig_e
  *
  * 'nsmpl' defines samples per channel which MUST be a multiple of 16!
  */
+
+/* Build a basic channel selector starting at channel 'start' up
+ * to and including 'end', i.e., 
+ *   (start<<0) | ((start+1)<<4) | ... | ((end)<<x)
+ *
+ * RETURNS selector or empty selector on error (start and end must be
+ * 1..10, start <= end).
+ */
+Sis8300ChannelSel
+sis8300BuildChannelSel(unsigned start, unsigned end);
+
 int
 sis8300DigiValidateSel(Sis8300ChannelSel sel);
 
