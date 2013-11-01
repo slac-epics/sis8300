@@ -45,6 +45,16 @@ typedef enum Si5326Mode_ {
 int
 si53xx_calcParms(uint64_t fout, Si5326Parms p, int verbose);
 
+/*
+ * Program the si5326 with the given parameters
+ *
+ * RETURNS: -1 on error; output frequency (which may
+ *          differ from the requested frequency due to
+ *          rational approximation).
+ */
+int64_t
+si5326_setup(int fd, Si5326Parms p);
+
 /* Probe the 5326 chip to find out if it has a usable narrow-band
  * reference, if it is strapped for wide-band mode or if there is
  * no valid reference (original Sis8300 module had Si5326 strapped
@@ -111,5 +121,20 @@ sis8300DigiReadReg(int fd, unsigned reg, uint32_t *val_p);
 
 int
 sis8300DigiWriteReg(int fd, unsigned reg, uint32_t val);
+
+/* Retrieve chip ID of the first ADC chip
+ *
+ * RETURNS: chip ID or a negative number on error.
+ */
+int
+sis8300DigiGetADC_ID(int fd);
+
+/* Determine the max. clock frequency supported by the
+ * first ADC chip on board.
+ * 
+ * RETURNS: max. clock frequency or zero on error,
+ */
+unsigned long
+sis8300DigiGetFclkMax(int fd);
 
 #endif

@@ -869,7 +869,7 @@ RatNum      im_i;
 	return si5326_checkParms("si53xx_calcParms", p, l);
 }
     
-static int64_t
+int64_t
 si5326_setup(int fd, Si5326Parms p)
 {
 uint64_t fo, fout;
@@ -970,7 +970,7 @@ sis8300DigiSetup(int fd, Si5326Parms si5326_parms, unsigned clkhl, int exttrig)
 int i;
 uint32_t cmd;
 long     fout;
-unsigned long fclk;
+unsigned long fclk, fmax;
 int      rval = 0;
 unsigned rat;
 
@@ -980,12 +980,11 @@ unsigned rat;
 		return -1;
 	}
 
-	/* MUX A + B: 3 to select on-board quartz     */
-    /* MUX C: 2 or 3 to pass A or B out to SI532x */
-    /* MUX D/E: 0 - external quartz / 1 - SI532x  */
-
-	/* Layout: 00 00 ee dd 00 cc bb aa            */
-    rwr(fd, SIS8300_CLOCK_DISTRIBUTION_MUX_REG, 0x03f | (si5326_parms ? 0x500 : 0));
+	/* Init. to high divider ratio so that fclk doesn't become too high */
+	ad9510_setup( fd, 0, 0xff );
+	ad9510_setup( fd, 1, 0xff );
+	/* Set to internal clock */
+    rwr(fd, SIS8300_CLOCK_DISTRIBUTION_MUX_REG, 0x03f);
 
 	if ( si5326_parms ) {
 		fout = si5326_setup( fd, si5326_parms );
@@ -1007,6 +1006,18 @@ unsigned rat;
 	fprintf(stderr,"AD9510 divider ratio:  %9u\n", rat);
 	fprintf(stderr,"Digitizer clock:       %9ldHz\n", fclk);
 
+	if ( 0 == (fmax = sis8300DigiGetFclkMax(fd)) ) {
+		fprintf(stderr,"Unable to determine max. digitizer clock frequency!\n");
+		return -1;
+	} else {
+		fprintf(stderr,"Max. digitizer clock: %9luHz\n", fmax);
+	}
+
+	if ( fclk > fmax ) {
+		fprintf(stderr,"Selected clock frequency too high!\n");
+		return -1;
+	}
+
 	/* Set infamous ADC tap delay */
 	rwr(fd, SIS8300_ADC_INPUT_TAP_DELAY_REG, SIS8300_TAP_DELAY_ALL_ADCS | sis8300_tap_delay( fclk ));
 	/* Busy-wait */
@@ -1021,6 +1032,13 @@ unsigned rat;
 	}
 
 	shift_adc_bits( fd );
+
+	/* MUX A + B: 3 to select on-board quartz     */
+    /* MUX C: 2 or 3 to pass A or B out to SI532x */
+    /* MUX D/E: 0 - external quartz / 1 - SI532x  */
+
+	/* Layout: 00 00 ee dd 00 cc bb aa            */
+    rwr(fd, SIS8300_CLOCK_DISTRIBUTION_MUX_REG, 0x03f | (si5326_parms ? 0x500 : 0));
 
 	/* 9510 Setup */
 	ad9510_setup(fd, 0, clkhl);
@@ -1233,4 +1251,43 @@ sis8300_reg r;
 	r.offset = reg;
 	r.data   = val;
 	return ioctl(fd, SIS8300_REG_WRITE, &r);
+}
+
+int
+sis8300DigiGetADC_ID(int fd)
+{
+	return adc_rd(fd, 0, 0x01);
+}
+
+unsigned long
+sis8300DigiGetFclkMax(int fd)
+{
+int chip_id = adc_rd(fd, 0, 0x01);
+int grade   = adc_rd(fd, 0, 0x02);
+	if ( chip_id < 0 || grade < 0 )
+		return 0;
+	grade = (grade>>4) & 3;
+	switch ( chip_id ) {
+		default: break;
+
+		case 0x32: /* AD9268 */
+			switch ( grade ) {
+				default: break;
+				case 1: return 125000000UL;
+				case 2: return 105000000UL;
+				case 3: return  80000000UL;
+			}
+		break;
+
+		case 0x82: /* AD9643 */
+			switch ( grade ) {
+				default: break;
+				case 0: return 250000000UL;
+				case 1: return 210000000UL;
+				case 3: return 170000000UL;
+			}
+		break;	
+	}
+
+	return 0;
 }
