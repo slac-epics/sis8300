@@ -42,12 +42,17 @@ EPICS_MODULES=$(MODULES_SITE_TOP)
 # =============================================================
 BASE_MODULE_VERSION=$(EPICS_BASE_VER)
 
+SIS8300_KDRV_MODULE_VERSION=
+
 # ============================================================
 #  Module Location
 # ============================================================
 
 # EPICS_BASE usually appears last so other apps can override stuff:
 EPICS_BASE=$(BASE_SITE_TOP)/$(BASE_MODULE_VERSION)
+
+SIS8300_KDRV=$(LINUX_KMODS_TOP)/sis8300drv/$(SIS8300_KDRV_MODULE_VERSION)
+
 
 # Set RULES here if you want to take build rules from somewhere
 # other than EPICS_BASE:
