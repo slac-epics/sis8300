@@ -1,4 +1,8 @@
 20131101 (T.S.):
+ - sis8300Digi.c: 
+    o when reading/writing ADC via SPI wait until not busy.
+    o only set tap delay for supported of # channels
+    o FIX: wait until tap dealy register *NOT* busy
  - added saio.c, saio.h (wrappers for linux' AIO syscalls)
  - made si5326_setup(int fd, Si5326Parms p) public
  - added sis8300DigiGetADC_ID(int fd)

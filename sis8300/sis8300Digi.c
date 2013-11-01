@@ -160,6 +160,15 @@ rrd_p(int fd, unsigned off, uint32_t *val_p)
 /* AD9268 ADC access primitives */
 
 static void
+adc_drain(int fd)
+{
+int rep=100;
+	do { 
+		us_sleep(10);
+	} while ( (rrd(fd, SIS8300_ADC_SPI_REG) & 0x8000000) && --rep > 0 );
+}
+
+static void
 adc_wr(int fd, unsigned inst, unsigned a, unsigned v)
 {
 uint32_t cmd;
@@ -172,7 +181,8 @@ uint32_t cmd;
 	cmd |= ((a&0xff)<<8) | (v&0xff);
 
 	rwr(fd, SIS8300_ADC_SPI_REG, cmd);
-	us_sleep(1);
+	
+	adc_drain(fd);
 }
 
 #define CMD_ADC_SPI_READ (1<<23)
@@ -189,6 +199,7 @@ uint32_t cmd;
 	cmd |= ( (a&0xff)<<8 ) | CMD_ADC_SPI_READ;
 
 	rwr(fd, SIS8300_ADC_SPI_REG, cmd);
+	adc_drain(fd);
 	return (int) (rrd(fd, SIS8300_ADC_SPI_REG) & 0xff);
 }
 /* AD9510 access primitives */
@@ -962,6 +973,7 @@ sis8300_tap_delay(unsigned long adc_clk)
 
 /* Mask selecting all ADC pairs */
 #define SIS8300_TAP_DELAY_ALL_ADCS  0x1f00
+#define SIS8300_TAP_DELAY_8_ADCS    0x0f00
 #define SIS8300_TAP_DELAY_BUSY     (1<<31)
 
 int
@@ -973,6 +985,7 @@ long     fout;
 unsigned long fclk, fmax;
 int      rval = 0;
 unsigned rat;
+int      is_8_ch_fw = is_8_channel_firmware( fd );
 
 	/* Assume single-channel buffer logic */
 	if ( (rrd(fd, SIS8300_FIRMWARE_OPTIONS_REG) & SIS8300_DUAL_CHANNEL_SAMPLING) ) {
@@ -1010,7 +1023,7 @@ unsigned rat;
 		fprintf(stderr,"Unable to determine max. digitizer clock frequency!\n");
 		return -1;
 	} else {
-		fprintf(stderr,"Max. digitizer clock: %9luHz\n", fmax);
+		fprintf(stderr,"Max. digitizer clock:  %9luHz\n", fmax);
 	}
 
 	if ( fclk > fmax ) {
@@ -1018,16 +1031,19 @@ unsigned rat;
 		return -1;
 	}
 
+	cmd = is_8_ch_fw ? SIS8300_TAP_DELAY_8_ADCS : SIS8300_TAP_DELAY_ALL_ADCS;
+	cmd |= sis8300_tap_delay( fclk );
+
 	/* Set infamous ADC tap delay */
-	rwr(fd, SIS8300_ADC_INPUT_TAP_DELAY_REG, SIS8300_TAP_DELAY_ALL_ADCS | sis8300_tap_delay( fclk ));
+	rwr(fd, SIS8300_ADC_INPUT_TAP_DELAY_REG, cmd);
 	/* Busy-wait */
-	for ( i=0; i<100000; i++ ) {
-		if ( ( rrd(fd, SIS8300_ADC_INPUT_TAP_DELAY_REG) & SIS8300_TAP_DELAY_BUSY ) ) {
+	for ( i=0; i<10000; i++ ) {
+		if ( ! ( rrd(fd, SIS8300_ADC_INPUT_TAP_DELAY_REG) & SIS8300_TAP_DELAY_BUSY ) ) {
 			break;
 		}
 	}
 
-	for ( i=0; i< is_8_channel_firmware( fd ) ? 4 : 5; i++ ) {
+	for ( i=0; i < ( is_8_ch_fw ? 4 : 5 ); i++ ) {
 		adc_setup(fd, i);
 	}
 
@@ -1264,6 +1280,9 @@ sis8300DigiGetFclkMax(int fd)
 {
 int chip_id = adc_rd(fd, 0, 0x01);
 int grade   = adc_rd(fd, 0, 0x02);
+/*
+	fprintf(stderr, "ADC CHIP ID: 0x%02x, grade 0x%02x\n", chip_id, grade);
+ */
 	if ( chip_id < 0 || grade < 0 )
 		return 0;
 	grade = (grade>>4) & 3;
