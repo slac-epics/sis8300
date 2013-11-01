@@ -1,0 +1,11 @@
+20131101 (T.S.):
+ - added saio.c, saio.h (wrappers for linux' AIO syscalls)
+ - made si5326_setup(int fd, Si5326Parms p) public
+ - added sis8300DigiGetADC_ID(int fd)
+ - added sis8300DigiGetFclkMax(int fd)
+ - sis8300DigiSetup(): initially set MUX to internal clock and
+   AD9510 to divide by 32; check whether the max. clock of the
+   ADC is compatible with the requested clock frequency and
+   reject if necessary. Program the final mux. and 9510 settings
+   only if frequency check passes.
+
