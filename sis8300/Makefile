@@ -9,15 +9,15 @@ include $(TOP)/configure/CONFIG
 #==================================================
 # Build an IOC support library
 
-LIBRARY_IOC += sis8300DigiComm
-sis8300DigiComm_SRCS_DEFAULT = sis8300DigiComm-stub.c
-sis8300DigiComm_SRCS_Linux = sis8300DigiComm.c sis8300Digi.c msgQ.c devSis8300Stringin.c ratapp.c
-DBD                = sis8300DigiComm.dbd
-PROD_IOC    += c109
+INC               += sis8300Digi.h
+INC               += saio.h
 
-DB += sis8300UsrData.db
+LIBRARY_IOC_Linux += sis8300Digi
+sis8300Digi_SRCS   = sis8300Digi.c ratapp.c saio.c
+PROD_IOC_Linux    += c109
 
-c109_SRCS=c109.c sis8300Digi.c ratapp.c
+c109_SRCS=c109.c
+c109_LIBS=sis8300Digi
 #c109_SYS_LIBS_Linux+=rt
 
 #===========================
