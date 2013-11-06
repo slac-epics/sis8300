@@ -1,3 +1,4 @@
 20131105 (T.S.):
+ sis8300/sis3800Digi.c:
  - fixed sis8300BuildChannelSel() (truncation to 32-bit issues)
  - do a few retries when waiting for Si5326 to lock
