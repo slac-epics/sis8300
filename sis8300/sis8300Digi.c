@@ -887,6 +887,7 @@ uint64_t fo, fout;
 uint32_t f3;
 unsigned v;
 Si53xxLim *l;
+int      retries;
 
 	l = si53xx_getLims( p->wb );
 
@@ -950,9 +951,18 @@ Si53xxLim *l;
 		fprintf(stderr,"si5326_setup(): ERROR -- missing reference\n");
 		return -1;
 	}
-	if ( si5326_rd(fd, 130) & 1 ) {
-		fprintf(stderr,"si5326_setup(): ERROR -- Si5326 won't lock\n");
-		return -1;
+	retries = 0;
+	while ( (si5326_rd(fd, 130) & 1) ) {
+		if ( 10 < retries ) {
+			fprintf(stderr,"si5326_setup(): ERROR -- Si5326 won't lock\n");
+			return -1;
+		}
+		retries++;
+		fprintf(stderr,"... still waiting for Si5326 to lock\n");
+		us_sleep( 500000 );
+	}
+	if ( retries ) {
+		fprintf(stderr,"OK, it did lock.\n");
 	}
 
 	return fout;
@@ -1114,11 +1124,14 @@ Sis8300ChannelSel
 sis8300BuildChannelSel(unsigned start, unsigned end)
 {
 Sis8300ChannelSel rval = 0;
-int               shft;
+
+	start &= 0xf;
+	end   &= 0xf;
 
 	if ( start > 0 ) {
-		for ( shft=0; start <= end; start++, (shft+=4) ) {
-			rval |= (start << shft);	
+		while ( start <= end ) {
+			rval = (rval << 4) | end;
+			end--;
 		}
 	}
 	return rval;
