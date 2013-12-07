@@ -1,3 +1,7 @@
+20131206 (T.S.):
+ - sis8300/sis8300Digi.c sis8300/sis8300Digi.h: added entry points
+   (sis8300Set9510Divider(), sis8300Get9510Clkhl()) to manipulate
+   the 9510 divider ratio.
 20131105 (T.S.):
  - sis8300/sis3800Digi.c:
     o fixed sis8300BuildChannelSel() (truncation to 32-bit issues)

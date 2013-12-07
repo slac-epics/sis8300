@@ -65,6 +65,24 @@ si5326_setup(int fd, Si5326Parms p);
 Si5326Mode
 sis8300ClkDetect(int fd);
 
+/* Change the 9510 divider - clkhl is *not* the divider ratio
+ * but the pattern of hi/lo times (consult the ad9510 datasheet)
+ */
+void
+sis8300Set9510Divider(int fd, unsigned clkhl);
+
+/*
+ * Convert ratio to clkhl pattern.
+ * Valid divider ratios are even numbers up to and including 32
+ * as well as 1 (in which case the routine returns
+ * SIS8300_BYPASS_9510_DIVIDER).
+ * Odd ratios (different from 1) are rounded down; the result
+ * for ratios bigger than 32 are undefined.
+ */
+unsigned
+sis8300Get9510Clkhl(unsigned ratio);
+
+
 /* clkhl value to bypass the 9510 divider; the divider
  * is automatically engaged (div by 2) if no si5326_parms are
  * given.

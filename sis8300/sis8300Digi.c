@@ -310,20 +310,49 @@ adc_setup(int fd, unsigned inst)
 	adc_wr( fd, inst, 0xff, 0x01 );
 }
 
-/* Setup of AD9510; options are divider 'high' and 'low' clocks
- * Divider ratio is: ( high + 1 ) + ( low + 1 )
- */
 static void
-ad9510_setup(int fd, unsigned i, unsigned clkhl)
+ad9510_synch(int fd)
+{
+	/* 9510 'sync' command as per demo software        */
+	rwr(fd, SIS8300_AD9510_SPI_REG,
+		AD9510_SPI_SET_FUNCTION_SYNCH_FPGA_CLK69);
+	us_sleep(1);
+	rwr(fd, SIS8300_AD9510_SPI_REG,
+		  AD9510_GENERATE_FUNCTION_PULSE_CMD
+		| AD9510_SPI_SET_FUNCTION_SYNCH_FPGA_CLK69);
+	us_sleep(1);
+}
+
+static void
+ad9510_set_divider(int fd, unsigned i, unsigned clkhl)
 {
 unsigned bypss;
-
 	if ( clkhl > 0xff ) {
 		bypss = 0x80;
 		clkhl = 0x00;
 	} else {
 		bypss = 0x00;
 	}
+
+	if ( 0 == i ) {
+		ad9510_wr(fd, i, 0x50, clkhl);
+		ad9510_wr(fd, i, 0x51, bypss); 
+	}
+
+	ad9510_wr(fd, i, 0x52, clkhl);
+	ad9510_wr(fd, i, 0x53, bypss); 
+	ad9510_wr(fd, i, 0x54, clkhl);
+	ad9510_wr(fd, i, 0x55, bypss); 
+	ad9510_wr(fd, i, 0x56, clkhl);
+	ad9510_wr(fd, i, 0x57, bypss); 
+}
+
+/* Setup of AD9510; options are divider 'high' and 'low' clocks
+ * Divider ratio is: ( high + 1 ) + ( low + 1 )
+ */
+static void
+ad9510_setup(int fd, unsigned i, unsigned clkhl)
+{
 
 	/* soft reset; bidirectional SPI mode */
 	ad9510_wr(fd, i, 0x00, 0xb0);
@@ -351,16 +380,9 @@ unsigned bypss;
 	if ( i ) {
 		ad9510_wr(fd, i, 0x50, 0x00);
 		ad9510_wr(fd, i, 0x51, 0xc0); 
-	} else {
-		ad9510_wr(fd, i, 0x50, clkhl);
-		ad9510_wr(fd, i, 0x51, bypss); 
 	}
-	ad9510_wr(fd, i, 0x52, clkhl);
-	ad9510_wr(fd, i, 0x53, bypss); 
-	ad9510_wr(fd, i, 0x54, clkhl);
-	ad9510_wr(fd, i, 0x55, bypss); 
-	ad9510_wr(fd, i, 0x56, clkhl);
-	ad9510_wr(fd, i, 0x57, bypss); 
+
+	ad9510_set_divider(fd, i, clkhl);
 
 	/* Function select: SYNCB */
 	ad9510_wr(fd, i, 0x58, 0x22);
@@ -1070,14 +1092,7 @@ int      is_8_ch_fw = is_8_channel_firmware( fd );
 	ad9510_setup(fd, 0, clkhl);
 	ad9510_setup(fd, 1, clkhl);
 
-	/* 9510 'sync' command as per demo software        */
-	rwr(fd, SIS8300_AD9510_SPI_REG,
-		AD9510_SPI_SET_FUNCTION_SYNCH_FPGA_CLK69);
-	us_sleep(1);
-	rwr(fd, SIS8300_AD9510_SPI_REG,
-		  AD9510_GENERATE_FUNCTION_PULSE_CMD
-		| AD9510_SPI_SET_FUNCTION_SYNCH_FPGA_CLK69);
-	us_sleep(1);
+	ad9510_synch(fd);
 
 	rwr(fd, SIS8300_PRETRIGGER_DELAY_REG, 0);
 	/* Enable external trigger; disable all channels */
@@ -1322,4 +1337,28 @@ int grade   = adc_rd(fd, 0, 0x02);
 	}
 
 	return 0;
+}
+
+/* Change the 9510 divider - clkhl is *not* the divider ratio
+ * but the pattern of hi/lo times (consult the ad9510 datasheet)
+ */
+void
+sis8300Set9510Divider(int fd, unsigned clkhl)
+{
+	ad9510_set_divider(fd, 0, clkhl);
+	/* UPDATE */
+	ad9510_wr(fd, 0, 0x5a, 0x01 ); 
+	ad9510_set_divider(fd, 1, clkhl);
+	/* UPDATE */
+	ad9510_wr(fd, 1, 0x5a, 0x01 ); 
+	ad9510_synch(fd);
+}
+
+unsigned
+sis8300Get9510Clkhl(unsigned ratio)
+{
+	if ( 1 == ratio )
+		return SIS8300_BYPASS_9510_DIVIDER;
+	ratio = ((ratio>>1) - 1) & 0xf;
+	return (ratio<<4) | ratio;
 }
