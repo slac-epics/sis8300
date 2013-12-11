@@ -327,7 +327,12 @@ static void
 ad9510_set_divider(int fd, unsigned i, unsigned clkhl)
 {
 unsigned bypss;
-	if ( clkhl > 0xff ) {
+
+	if ( SIS8300_SILENT_9510_DIVIDER == clkhl ) {
+		bypss = 0x40;
+		clkhl = 0xff;
+	} else if ( clkhl > 0xff ) {
+		/* should compare against SIS8300_BYPASS_DIVIDER but keep 0xff for sake of bwds compat */
 		bypss = 0x80;
 		clkhl = 0x00;
 	} else {
@@ -990,6 +995,11 @@ int      retries;
 	return fout;
 }
 
+/* Mask selecting all ADC pairs */
+#define SIS8300_TAP_DELAY_ALL_ADCS  0x1f00
+#define SIS8300_TAP_DELAY_8_ADCS    0x0f00
+#define SIS8300_TAP_DELAY_BUSY     (1<<31)
+
 static unsigned
 sis8300_tap_delay(unsigned long adc_clk)
 {
@@ -1003,10 +1013,22 @@ sis8300_tap_delay(unsigned long adc_clk)
 	return adc_clk > 130000000UL ? 11 : 0;
 }
 
-/* Mask selecting all ADC pairs */
-#define SIS8300_TAP_DELAY_ALL_ADCS  0x1f00
-#define SIS8300_TAP_DELAY_8_ADCS    0x0f00
-#define SIS8300_TAP_DELAY_BUSY     (1<<31)
+static void
+sis8300_set_tap_delay(int fd, unsigned ch_mask, unsigned long fclk)
+{
+int i;
+
+	ch_mask |= sis8300_tap_delay( fclk );
+
+	/* Set infamous ADC tap delay */
+	rwr(fd, SIS8300_ADC_INPUT_TAP_DELAY_REG, ch_mask);
+	/* Busy-wait */
+	for ( i=0; i<10000; i++ ) {
+		if ( ! ( rrd(fd, SIS8300_ADC_INPUT_TAP_DELAY_REG) & SIS8300_TAP_DELAY_BUSY ) ) {
+			break;
+		}
+	}
+}
 
 int
 sis8300DigiSetup(int fd, Si5326Parms si5326_parms, unsigned clkhl, int exttrig)
@@ -1016,7 +1038,6 @@ uint32_t cmd;
 long     fout;
 unsigned long fclk, fmax;
 int      rval = 0;
-unsigned rat;
 int      is_8_ch_fw = is_8_channel_firmware( fd );
 
 	/* Assume single-channel buffer logic */
@@ -1025,9 +1046,10 @@ int      is_8_ch_fw = is_8_channel_firmware( fd );
 		return -1;
 	}
 
-	/* Init. to high divider ratio so that fclk doesn't become too high */
-	ad9510_setup( fd, 0, 0xff );
-	ad9510_setup( fd, 1, 0xff );
+	/* Infinite divider ratio so that fclk doesn't become too high */
+	ad9510_setup( fd, 0, SIS8300_SILENT_9510_DIVIDER );
+	ad9510_setup( fd, 1, SIS8300_SILENT_9510_DIVIDER );
+
 	/* Set to internal clock */
     rwr(fd, SIS8300_CLOCK_DISTRIBUTION_MUX_REG, 0x03f);
 
@@ -1044,11 +1066,16 @@ int      is_8_ch_fw = is_8_channel_firmware( fd );
 		fprintf(stderr,"On-board clock in use: %9ldHz\n", fout);
 	}
 
-	rat = clkhl > 0xff ? 1 : (clkhl & 0xf) + ((clkhl>>4) & 0xf) + 2;
-
-	fclk = fout/rat;
-
-	fprintf(stderr,"AD9510 divider ratio:  %9u\n", rat);
+	if ( SIS8300_SILENT_9510_DIVIDER == clkhl ) {
+		fclk = 0;
+		fprintf(stderr,"AD9510 divider ratio:  DISABLED\n");
+	} else {
+		unsigned rat;
+		/* compare against 0xff for sake of bwds compat. should use SIS8300_BYPASS_9510_DIVIDER */
+		rat = clkhl > 0xff ? 1 : (clkhl & 0xf) + ((clkhl>>4) & 0xf) + 2;
+		fclk = fout/rat;
+		fprintf(stderr,"AD9510 divider ratio:  %9u\n", rat);
+	}
 	fprintf(stderr,"Digitizer clock:       %9ldHz\n", fclk);
 
 	if ( 0 == (fmax = sis8300DigiGetFclkMax(fd)) ) {
@@ -1064,16 +1091,7 @@ int      is_8_ch_fw = is_8_channel_firmware( fd );
 	}
 
 	cmd = is_8_ch_fw ? SIS8300_TAP_DELAY_8_ADCS : SIS8300_TAP_DELAY_ALL_ADCS;
-	cmd |= sis8300_tap_delay( fclk );
-
-	/* Set infamous ADC tap delay */
-	rwr(fd, SIS8300_ADC_INPUT_TAP_DELAY_REG, cmd);
-	/* Busy-wait */
-	for ( i=0; i<10000; i++ ) {
-		if ( ! ( rrd(fd, SIS8300_ADC_INPUT_TAP_DELAY_REG) & SIS8300_TAP_DELAY_BUSY ) ) {
-			break;
-		}
-	}
+	sis8300_set_tap_delay(fd, cmd, fclk);
 
 	for ( i=0; i < ( is_8_ch_fw ? 4 : 5 ); i++ ) {
 		adc_setup(fd, i);
@@ -1361,4 +1379,20 @@ sis8300Get9510Clkhl(unsigned ratio)
 		return SIS8300_BYPASS_9510_DIVIDER;
 	ratio = ((ratio>>1) - 1) & 0xf;
 	return (ratio<<4) | ratio;
+}
+
+/* Set tap delay for fclk (Hz) -- it SUCKS that we have to to this */
+void
+sis8300SetTapDelay(int fd, unsigned long fclk)
+{
+int      is_8_ch_fw = is_8_channel_firmware( fd );
+unsigned cmd;
+
+	/* Can't just read-modify-write the register because there is a firmware bug
+	 * which makes it impossible to read back :-(
+	 */
+
+	cmd = is_8_ch_fw ? SIS8300_TAP_DELAY_8_ADCS : SIS8300_TAP_DELAY_ALL_ADCS;
+
+	sis8300_set_tap_delay(fd, cmd, fclk);
 }

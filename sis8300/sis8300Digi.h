@@ -71,6 +71,12 @@ sis8300ClkDetect(int fd);
 void
 sis8300Set9510Divider(int fd, unsigned clkhl);
 
+/* Bypass the 9510 divider (div. ratio 0)             */
+#define SIS8300_BYPASS_9510_DIVIDER 0xffffffff
+
+/* Hold 9510 output steady low (div. ration infinite) */
+#define SIS8300_SILENT_9510_DIVIDER 0xfffffffe
+
 /*
  * Convert ratio to clkhl pattern.
  * Valid divider ratios are even numbers up to and including 32
@@ -87,7 +93,6 @@ sis8300Get9510Clkhl(unsigned ratio);
  * is automatically engaged (div by 2) if no si5326_parms are
  * given.
  */
-#define SIS8300_BYPASS_9510_DIVIDER 0xffffffff
 int
 sis8300DigiSetup(int fd, Si5326Parms si5326_parms, unsigned clkhl, int exttrig_en);
 
@@ -154,5 +159,9 @@ sis8300DigiGetADC_ID(int fd);
  */
 unsigned long
 sis8300DigiGetFclkMax(int fd);
+
+/* Set tap delay for fclk (Hz) -- it SUCKS that we have to to this */
+void
+sis8300SetTapDelay(int fd, unsigned long fclk);
 
 #endif
