@@ -69,7 +69,7 @@ sis8300ClkDetect(int fd);
  * but the pattern of hi/lo times (consult the ad9510 datasheet)
  */
 void
-sis8300Set9510Divider(int fd, unsigned clkhl);
+sis8300DigiSet9510Divider(int fd, unsigned clkhl);
 
 /* Bypass the 9510 divider (div. ratio 0)             */
 #define SIS8300_BYPASS_9510_DIVIDER 0xffffffff
@@ -86,7 +86,7 @@ sis8300Set9510Divider(int fd, unsigned clkhl);
  * for ratios bigger than 32 are undefined.
  */
 unsigned
-sis8300Get9510Clkhl(unsigned ratio);
+sis8300DigiGet9510Clkhl(unsigned ratio);
 
 
 /* clkhl value to bypass the 9510 divider; the divider
@@ -162,6 +162,6 @@ sis8300DigiGetFclkMax(int fd);
 
 /* Set tap delay for fclk (Hz) -- it SUCKS that we have to to this */
 void
-sis8300SetTapDelay(int fd, unsigned long fclk);
+sis8300DigiSetTapDelay(int fd, unsigned long fclk);
 
 #endif

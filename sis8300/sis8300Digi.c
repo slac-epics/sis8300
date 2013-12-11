@@ -1361,7 +1361,7 @@ int grade   = adc_rd(fd, 0, 0x02);
  * but the pattern of hi/lo times (consult the ad9510 datasheet)
  */
 void
-sis8300Set9510Divider(int fd, unsigned clkhl)
+sis8300DigiSet9510Divider(int fd, unsigned clkhl)
 {
 	ad9510_set_divider(fd, 0, clkhl);
 	/* UPDATE */
@@ -1373,7 +1373,7 @@ sis8300Set9510Divider(int fd, unsigned clkhl)
 }
 
 unsigned
-sis8300Get9510Clkhl(unsigned ratio)
+sis8300DigiGet9510Clkhl(unsigned ratio)
 {
 	if ( 1 == ratio )
 		return SIS8300_BYPASS_9510_DIVIDER;
@@ -1383,7 +1383,7 @@ sis8300Get9510Clkhl(unsigned ratio)
 
 /* Set tap delay for fclk (Hz) -- it SUCKS that we have to to this */
 void
-sis8300SetTapDelay(int fd, unsigned long fclk)
+sis8300DigiSetTapDelay(int fd, unsigned long fclk)
 {
 int      is_8_ch_fw = is_8_channel_firmware( fd );
 unsigned cmd;
