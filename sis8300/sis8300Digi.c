@@ -995,6 +995,21 @@ int      retries;
 	return fout;
 }
 
+/*
+ * Obtain basic status of the si5326
+ */
+int
+si5326_status(int fd)
+{
+int rval = ( si5326_rd(fd, 129) & 7 );
+
+	if ( (si5326_rd(fd, 130) & 1) )
+		rval |= SIS8300_SI5326_NO_LOCK;
+
+	return rval;
+}
+
+
 /* Mask selecting all ADC pairs */
 #define SIS8300_TAP_DELAY_ALL_ADCS  0x1f00
 #define SIS8300_TAP_DELAY_8_ADCS    0x0f00

@@ -55,6 +55,16 @@ si53xx_calcParms(uint64_t fout, Si5326Parms p, int verbose);
 int64_t
 si5326_setup(int fd, Si5326Parms p);
 
+/*
+ * Obtain basic status of the si5326
+ */
+#define SIS8300_SI5326_NO_REF	(1<<0) /* no reference present */
+#define SIS8300_SI5326_NO_CLK1  (1<<1) /* no signal at CLK1    */
+#define SIS8300_SI5326_NO_CLK2  (1<<2) /* no signal at CLK2    */
+#define SIS8300_SI5326_NO_LOCK  (1<<8) /* PLL not locked       */
+int
+si5326_status(int fd);
+
 /* Probe the 5326 chip to find out if it has a usable narrow-band
  * reference, if it is strapped for wide-band mode or if there is
  * no valid reference (original Sis8300 module had Si5326 strapped

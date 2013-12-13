@@ -1,3 +1,6 @@
+20131212 (T.S.):
+ - sis8300/sis8300Digi.c, sis8300/sis8300Digi.h: added entry points
+   si5326_status()
 20131206 (T.S.):
  - sis8300/sis8300Digi.c sis8300/sis8300Digi.h: added entry points
    (sis8300Set9510Divider(), sis8300Get9510Clkhl()) to manipulate
