@@ -15,7 +15,12 @@ static void usage(const char *nm)
 	fprintf(stderr,"           -h         : print this message\n");
 	fprintf(stderr,"           -q         : query Si5236 operating mode only\n");
 	fprintf(stderr,"           -d device  : use 'device' (path to dev-node)\n");
-	fprintf(stderr,"           -S         : set muxes to use si5326 clock\n");
+	fprintf(stderr,"           -S         : set muxes to use si5326 clock. Note\n");
+	fprintf(stderr,"                        that this (for legacy reasons) also\n");
+	fprintf(stderr,"                        sets the frequency to 109MHz. Thus,\n");
+	fprintf(stderr,"                        when you use -f either omit -S or\n");
+	fprintf(stderr,"                        put -S before -f on the command line.\n");
+
 	fprintf(stderr,"           -b         : do not bypass 9510 dividers (only if -S in wide-band mode)\n");
 	fprintf(stderr,"           -B         : enforce bypass of 9510 dividers\n");
 	fprintf(stderr,"           -e         : disable external trigger (enabled by default)\n");
