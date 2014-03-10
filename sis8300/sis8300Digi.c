@@ -1186,14 +1186,14 @@ Sis8300ChannelSel rval = 0;
 }
 
 int
-sis8300DigiValidateSel(Sis8300ChannelSel sel)
+sis8300DigiValidateSel(Sis8300ChannelSel sel, int max)
 {
 int               i,j,n,k;
 Sis8300ChannelSel s,t;
 
 	for ( i=0, s=sel; 0 != (n = ( s & 0xf ) ); ) {
-		if ( n > 10 ) {
-			fprintf(stderr,"channel # %i in selector pos %i too big (1..10)\n", n, i);
+		if ( n > max ) {
+			fprintf(stderr,"channel # %i in selector pos %i too big (1..%i)\n", n, i, max);
 			return -1;
 		}
 		i++;
@@ -1211,8 +1211,8 @@ Sis8300ChannelSel s,t;
 }
 
 /* channel_selector defines the order (and number) of channels in memory.
- * E.g., to have channels 4, 0, 8, 9 in this order in memory set 
- * 'channel_selector' = (9 << 12) | (8 << 8) | (0 << 4) | (4 << 0)
+ * E.g., to have channels 4, 1, 8, 9 in this order in memory set 
+ * 'channel_selector' = (9 << 12) | (8 << 8) | (1 << 4) | (4 << 0)
  * 'nsmpl' defines samples per channel!
  */
 int
@@ -1221,12 +1221,15 @@ sis8300DigiSetCount(int fd, Sis8300ChannelSel channel_selector, unsigned nsmpl)
 int      n,ch;
 int      nblks;
 uint32_t cmd;
+int      is_8_ch;
 
 	if ( nsmpl & 0xf ) {
 		return -1;
 	}
 
-	if ( sis8300DigiValidateSel(channel_selector) ) {
+	is_8_ch = is_8_channel_firmware(fd);
+
+	if ( sis8300DigiValidateSel(channel_selector, is_8_ch ? 8 : 10) ) {
 		return -1;
 	}
 
@@ -1235,13 +1238,8 @@ uint32_t cmd;
 	rwr(fd, SIS8300_SAMPLE_LENGTH_REG,    nblks - 1);
 
 	cmd  = rrd(fd, SIS8300_SAMPLE_CONTROL_REG);
-	cmd |= 0x0ff;
+	cmd |= 0x3ff;
 
-	if ( is_8_channel_firmware(fd) ) {
-		cmd |= 0x300;
-	} else {
-		cmd &= ~0x300;
-	}
 	/* Sample to contiguous memory area */
 	for ( n=0; (ch = (channel_selector & 0xf)); n+=nblks, channel_selector >>= 4 ) {
 		ch--;

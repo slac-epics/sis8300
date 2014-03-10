@@ -1,3 +1,10 @@
+20140310 (T.S.):
+ - sis8300/sis8300.c, sis8300/sis8300.h: added 'max channel no.' argument
+   to sis8300DigiValidateSel() since there are now models with only 8 ch.
+ - sis8300/sis8300.c: sis8300DigiSetCount() - BUGFIX: channel-disable
+   mask was incorrectly computed if CH9 or CH10 were unused (both
+   of these were always enabled and could corrupt readings of other
+   channels in memory).
 20131212 (T.S.):
  - sis8300/sis8300Digi.c, sis8300/sis8300Digi.h: added entry points
    si5326_status()
