@@ -1186,10 +1186,18 @@ Sis8300ChannelSel rval = 0;
 }
 
 int
-sis8300DigiValidateSel(Sis8300ChannelSel sel, int max)
+sis8300DigiValidateSel(int fd, Sis8300ChannelSel sel)
 {
 int               i,j,n,k;
+int               max;
 Sis8300ChannelSel s,t;
+
+	if ( fd < 0 ) {
+		fprintf(stderr,"sis8300DigiValidateSel(): invalid file descriptor\n");
+		return -1;
+	}
+
+	max = is_8_channel_firmware(fd) ? 8 : 10;
 
 	for ( i=0, s=sel; 0 != (n = ( s & 0xf ) ); ) {
 		if ( n > max ) {
@@ -1221,15 +1229,12 @@ sis8300DigiSetCount(int fd, Sis8300ChannelSel channel_selector, unsigned nsmpl)
 int      n,ch;
 int      nblks;
 uint32_t cmd;
-int      is_8_ch;
 
 	if ( nsmpl & 0xf ) {
 		return -1;
 	}
 
-	is_8_ch = is_8_channel_firmware(fd);
-
-	if ( sis8300DigiValidateSel(channel_selector, is_8_ch ? 8 : 10) ) {
+	if ( sis8300DigiValidateSel(fd, channel_selector) ) {
 		return -1;
 	}
 

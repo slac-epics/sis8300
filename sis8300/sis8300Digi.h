@@ -126,7 +126,7 @@ Sis8300ChannelSel
 sis8300BuildChannelSel(unsigned start, unsigned end);
 
 int
-sis8300DigiValidateSel(Sis8300ChannelSel sel, int max);
+sis8300DigiValidateSel(int fd, Sis8300ChannelSel sel);
 
 int
 sis8300DigiSetCount(int fd, Sis8300ChannelSel channel_selector, unsigned nsmpl);

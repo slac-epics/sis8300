@@ -1,6 +1,8 @@
 20140310 (T.S.):
- - sis8300/sis8300.c, sis8300/sis8300.h: added 'max channel no.' argument
+ - sis8300/sis8300.c, sis8300/sis8300.h: added 'fd' argument
    to sis8300DigiValidateSel() since there are now models with only 8 ch.
+   Having access to 'fd' the code can figure out the supported number
+   of channels.
  - sis8300/sis8300.c: sis8300DigiSetCount() - BUGFIX: channel-disable
    mask was incorrectly computed if CH9 or CH10 were unused (both
    of these were always enabled and could corrupt readings of other
