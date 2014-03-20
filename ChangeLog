@@ -1,3 +1,5 @@
+20140320 (T.S.):
+ - sis8300-R1-0-0 RELEASE
 20140310 (T.S.):
  - sis8300/sis8300.c, sis8300/sis8300.h: added 'fd' argument
    to sis8300DigiValidateSel() since there are now models with only 8 ch.
