@@ -1,4 +1,3 @@
-20140320: sis8300-R1-0-0
 #==============================================================
 #
 #  Name: RELEASE_NOTES
@@ -10,3 +9,6 @@
 #  Rev:  dd-mmm-yyyy, Reviewer's Name    (USERNAME)
 #--------------------------------------------------------------
 
+sis8300-R1-0-1 - configure/RELEASE: update macro names to match eco
+
+sis8300-R1-0-0 - Initial tagged release
