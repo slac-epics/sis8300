@@ -51,7 +51,7 @@ SIS8300_KDRV_MODULE_VERSION=Branch_Straumann
 # EPICS_BASE usually appears last so other apps can override stuff:
 EPICS_BASE=$(BASE_SITE_TOP)/$(BASE_MODULE_VERSION)
 
-SIS8300_KDRV=$(PACKAGE_SITE_TOP)/linuxKernel_modules/sis8300drv/$(SIS8300_KDRV_MODULE_VERSION)
+SIS8300_KDRV=$(PACKAGE_SITE_TOP)/linuxKernel_Modules/sis8300drv/$(SIS8300_KDRV_MODULE_VERSION)
 
 
 # Set RULES here if you want to take build rules from somewhere
