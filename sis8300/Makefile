@@ -10,10 +10,9 @@ include $(TOP)/configure/CONFIG
 # Build an IOC support library
 
 INC               += sis8300Digi.h
-INC               += saio.h
 
 LIBRARY_IOC_Linux += sis8300Digi
-sis8300Digi_SRCS   = sis8300Digi.c ratapp.c saio.c
+sis8300Digi_SRCS   = sis8300Digi.c ratapp.c
 PROD_IOC_Linux    += c109
 
 c109_SRCS=c109.c
