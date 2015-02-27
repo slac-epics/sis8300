@@ -9,6 +9,9 @@
 #  Rev:  dd-mmm-yyyy, Reviewer's Name    (USERNAME)
 #--------------------------------------------------------------
 
+sis8300-R2-0-0   Tagged a release for production: using new linuxRT kernel
+                 Till had to make some changes. 
+
 sis8300-R1-0-1 - configure/RELEASE: update macro names to match eco
 
 sis8300-R1-0-0 - Initial tagged release
