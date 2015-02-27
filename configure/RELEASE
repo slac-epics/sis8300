@@ -42,7 +42,7 @@ EPICS_MODULES=$(MODULES_SITE_TOP)
 # =============================================================
 BASE_MODULE_VERSION=$(EPICS_BASE_VER)
 
-SIS8300_KDRV_MODULE_VERSION=Branch_Straumann
+SIS8300_KDRV_MODULE_VERSION=buildroot-uclibc-x86_64
 
 # ============================================================
 #  Module Location
