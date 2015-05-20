@@ -157,6 +157,19 @@ rrd_p(int fd, unsigned off, uint32_t *val_p)
 	*val_p = rrd(fd, off);
 }
 
+static int
+check_fd(int fd, const char *p)
+{
+sis8300_reg r;
+	r.offset = SIS8300_IDENTIFIER_VERSION_REG;
+	if ( ioctl(fd, SIS8300_REG_READ, &r) ) {
+		if ( p )
+			fprintf(stderr,"%s: invalid file descriptor: %s\n", p, strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
 /* AD9268 ADC access primitives */
 
 static void
@@ -431,6 +444,9 @@ uint32_t   old_0,v1,v2;
 #ifdef MEASURE_POLLING
 unsigned long dly;
 #endif
+
+	if ( check_fd( fd, "sis8300ClkDetect" ) )
+		return Si5326_Error;
 
 	/* Reset */
 	si5326_wr(fd, 136, 0x80);
@@ -917,6 +933,9 @@ unsigned v;
 Si53xxLim *l;
 int      retries;
 
+	if ( check_fd( fd, "si5326_setup") )
+		return -1;
+
 	l = si53xx_getLims( p->wb );
 
 	if ( si5326_checkParms( "si5326_setup", p, l ) )
@@ -1002,7 +1021,12 @@ int      retries;
 int
 si5326_status(int fd)
 {
-int rval = ( si5326_rd(fd, 129) & 7 );
+int      rval;
+
+	if ( check_fd( fd, "si5326_status" ) )
+		return -1;
+
+	rval = ( si5326_rd(fd, 129) & 7 );
 
 	if ( (si5326_rd(fd, 130) & 1) )
 		rval |= SIS8300_SI5326_NO_LOCK;
@@ -1055,6 +1079,9 @@ long     fout;
 unsigned long fclk, fmax;
 int      rval = 0;
 int      is_8_ch_fw = is_8_channel_firmware( fd );
+
+	if ( check_fd( fd, "sis8300DigiSetup" ) )
+		return -1;
 
 	/* Assume single-channel buffer logic */
 	if ( (rrd(fd, SIS8300_FIRMWARE_OPTIONS_REG) & SIS8300_DUAL_CHANNEL_SAMPLING) ) {
@@ -1193,23 +1220,23 @@ int               i,j,n,k;
 int               max;
 Sis8300ChannelSel s,t;
 
-	if ( fd < 0 ) {
-		fprintf(stderr,"sis8300DigiValidateSel(): invalid file descriptor\n");
+	if ( check_fd( fd, "sis8300DigiValidateSel" ) )
 		return -1;
-	}
 
 	max = is_8_channel_firmware(fd) ? 8 : 10;
 
-	for ( i=0, s=sel; 0 != (n = ( s & 0xf ) ); ) {
+	for ( i=0, s= (sel & ~SIS8300_VALIDATE_SEL_QUIET); 0 != (n = ( s & 0xf ) ); ) {
 		if ( n > max ) {
-			fprintf(stderr,"channel # %i in selector pos %i too big (1..%i)\n", n, i, max);
+			if ( ! (sel & SIS8300_VALIDATE_SEL_QUIET) )
+				fprintf(stderr,"channel # %i in selector pos %i too big (1..%i)\n", n, i, max);
 			return -1;
 		}
 		i++;
 		s >>= 4;
 		for ( j=i, t=s; (k = t & 0xf); ) {
 			if ( k == n ) {
-				fprintf(stderr,"channel # %i duplicated in selector pos %i\n", n, j);
+				if ( ! (sel & SIS8300_VALIDATE_SEL_QUIET) )
+					fprintf(stderr,"channel # %i duplicated in selector pos %i\n", n, j);
 				return -1;
 			}
 			j++;
@@ -1235,9 +1262,12 @@ uint32_t cmd;
 		return -1;
 	}
 
+	/* check_fd is performed by this routine */
 	if ( sis8300DigiValidateSel(fd, channel_selector) ) {
 		return -1;
 	}
+
+	channel_selector &= ~ SIS8300_VALIDATE_SEL_QUIET;
 
 	nblks = (nsmpl >> 4);
 
@@ -1337,17 +1367,28 @@ sis8300_reg r;
 int
 sis8300DigiGetADC_ID(int fd)
 {
+	if ( check_fd( fd, "sis8300DigiGetADC_ID" ) )
+		return -1;
+
 	return adc_rd(fd, 0, 0x01);
 }
 
 unsigned long
 sis8300DigiGetFclkMax(int fd)
 {
-int chip_id = adc_rd(fd, 0, 0x01);
-int grade   = adc_rd(fd, 0, 0x02);
+int chip_id;
+int grade;
+
+	if ( check_fd( fd, "sis8300DigiGetFclkMax" ) )
+		return 0;
+
+    chip_id = adc_rd(fd, 0, 0x01);
+    grade   = adc_rd(fd, 0, 0x02);
+
 /*
 	fprintf(stderr, "ADC CHIP ID: 0x%02x, grade 0x%02x\n", chip_id, grade);
  */
+
 	if ( chip_id < 0 || grade < 0 )
 		return 0;
 	grade = (grade>>4) & 3;
@@ -1382,6 +1423,9 @@ int grade   = adc_rd(fd, 0, 0x02);
 void
 sis8300DigiSet9510Divider(int fd, unsigned clkhl)
 {
+	if ( check_fd( fd, "sis8300DigiSet9510Divider" ) )
+		return;
+
 	ad9510_set_divider(fd, 0, clkhl);
 	/* UPDATE */
 	ad9510_wr(fd, 0, 0x5a, 0x01 ); 
@@ -1404,8 +1448,13 @@ sis8300DigiGet9510Clkhl(unsigned ratio)
 void
 sis8300DigiSetTapDelay(int fd, unsigned long fclk)
 {
-int      is_8_ch_fw = is_8_channel_firmware( fd );
+int      is_8_ch_fw;
 unsigned cmd;
+
+	if ( check_fd( fd, "sis8300DigiSetTapDelay" ) )
+		return;
+
+    is_8_ch_fw = is_8_channel_firmware( fd );
 
 	/* Can't just read-modify-write the register because there is a firmware bug
 	 * which makes it impossible to read back :-(
@@ -1414,4 +1463,16 @@ unsigned cmd;
 	cmd = is_8_ch_fw ? SIS8300_TAP_DELAY_8_ADCS : SIS8300_TAP_DELAY_ALL_ADCS;
 
 	sis8300_set_tap_delay(fd, cmd, fclk);
+}
+
+long
+sis8300DigiGetFeatures(int fd)
+{
+long     nch;
+
+	if ( check_fd( fd, "sis8300DigiGetFeatures" ) )
+		return -1;
+
+	nch = is_8_channel_firmware( fd ) ? 8L : 10L;
+	return nch;
 }

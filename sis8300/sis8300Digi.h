@@ -125,6 +125,16 @@ sis8300DigiSetup(int fd, Si5326Parms si5326_parms, unsigned clkhl, int exttrig_e
 Sis8300ChannelSel
 sis8300BuildChannelSel(unsigned start, unsigned end);
 
+/* Check the channel selector for validity.
+ * For sake of backwards compatibility: if the
+ * macro SIS8300_VALIDATE_SEL_QUIET is ORed into
+ * the selector then no error messages are printed
+ * if the selector is invalid. The caller may just
+ * use the return value (-1).
+ */ 
+
+#define SIS8300_VALIDATE_SEL_QUIET (0x8000000000000000ULL)
+
 int
 sis8300DigiValidateSel(int fd, Sis8300ChannelSel sel);
 
@@ -173,5 +183,18 @@ sis8300DigiGetFclkMax(int fd);
 /* Set tap delay for fclk (Hz) -- it SUCKS that we have to to this */
 void
 sis8300DigiSetTapDelay(int fd, unsigned long fclk);
+
+/* Obtain information about some of the features
+ * of this digitizer. So far, only the 'number of channels'
+ * is implemented.
+ *
+ * NOTE: before extracting any feature with the respective
+ *       macros you MUST check the return value which
+ *       may be -1 to indicate errors.
+ */
+long
+sis8300DigiGetFeatures(int fd);
+
+#define SIS8300_FEAT_N_CHANNELS(f) ((f)&0xf)
 
 #endif

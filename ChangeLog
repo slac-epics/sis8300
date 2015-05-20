@@ -1,3 +1,15 @@
+20150520 (T.S.):
+ - sis8300Digi.h, sis8300.c: new option to let sis8300DigiValidateSel()
+   run quietly.
+ - sis8300Digi.h, sis8300.c: new call 'sis8300DigiGetFeatures() to inquire
+   about features. So far only the 'number of channels' is supported.
+ - sis8300Digi.c: added file-descriptor validity checks
+ - c109.c:
+     added '-c sel' option to let user define channel selector
+     BUGFIX: default selector was set to all (10) channels which
+             failed on 8-channel models. We now use the new 'sis8300DigiGetFeatures()'
+             call to obtain the number of channels and clip the default
+             selector accordingly.
 20140320 (T.S.):
  - sis8300-R1-0-0 RELEASE
 20140310 (T.S.):

@@ -11,7 +11,7 @@
 
 static void usage(const char *nm)
 {
-	fprintf(stderr,"Usage: %s [-d device] [-f freq] [-L loop_bandwidth] [-qh] [-S] [-b] [-B] [-N nblks] [-4] [-T W|N] [-C] <config>\n\n", nm);
+	fprintf(stderr,"Usage: %s [-d device] [-f freq] [-L loop_bandwidth] [-qh] [-c sel] [-S] [-b] [-B] [-N nblks] [-4] [-T W|N] [-C] <config>\n\n", nm);
 	fprintf(stderr,"           -h         : print this message\n");
 	fprintf(stderr,"           -q         : query Si5236 operating mode only\n");
 	fprintf(stderr,"           -d device  : use 'device' (path to dev-node)\n");
@@ -35,6 +35,8 @@ static void usage(const char *nm)
 	fprintf(stderr,"           -L bw      : Set PLL loop bandwidth\n");
 	fprintf(stderr,"           -C         : read config parameters <n3> <n2h> <n2l> <n1h> <nc> <bwsel>\n");
 	fprintf(stderr,"           -I         : ignore fixed, hard-configured configurations\n");
+	fprintf(stderr,"           -c sel     : provide selector which defines channel enablement and assignment\n");
+	fprintf(stderr,"                        to memory layout (see sis8300Digi.h for more information)\n");
 	fprintf(stderr,"           -v         : be verbose\n");
 }
 
@@ -146,10 +148,15 @@ Si5326Mode         mode = Si5326_Error;
 Si5326ParmsRec     parms;
 unsigned *pp[6];
 uint64_t fout, rat;
+unsigned long long *ull_p;
+unsigned long long sel_i;
+int      sel_i_set = 0;
+long     f;
 
-	while ( (opt = getopt(argc, argv, "hqSbBed:N:4f:CT:IvL:")) > 0 ) {
-		i_p  = 0;
-		ul_p = 0;
+	while ( (opt = getopt(argc, argv, "hqSbBed:N:4f:CT:IvL:c:")) > 0 ) {
+		i_p   = 0;
+		ul_p  = 0;
+		ull_p = 0;
 		switch ( opt ) {
 			default:
 			case 'h': usage(argv[0]); return 0;
@@ -164,7 +171,7 @@ uint64_t fout, rat;
 
 			case 'N': i_p        = &nblks; break;
 	
-			case '4': sel = 0x8642ULL; break;
+			case '4': sel = 0x8642ULL; sel_i_set = 0; break;
 
 			case 'f': ul_p = &freq; break;
 			case 'C': do_config = 1; break;
@@ -181,17 +188,25 @@ uint64_t fout, rat;
 			case 'L': i_p = &bw; break;
 
 			case 'I': ignore_fixed = 1; break;
+
+			case 'c': ull_p = &sel_i; sel_i_set = 1; break;
 		}
 
 		if ( i_p ) {
 			if ( 1 != sscanf(optarg,"%i",i_p) ) {
-				fprintf(stderr,"Option '%c' needs integer argument!\n", opt);
+				fprintf(stderr,"Option '%c' needs integer argument (scanning failed)!\n", opt);
 				return 1;
 			}
 		}
 		if ( ul_p ) {
 			if ( 1 != sscanf(optarg,"%li",ul_p) ) {
-				fprintf(stderr,"Option '%c' needs long integer argument!\n", opt);
+				fprintf(stderr,"Option '%c' needs long integer argument (scanning failed)!\n", opt);
+				return 1;
+			}
+		}
+		if ( ull_p ) {
+			if ( 1 != sscanf(optarg,"%lli",ull_p) ) {
+				fprintf(stderr,"Option '%c' needs long long integer argument (scanning failed)!\n", opt);
 				return 1;
 			}
 		}
@@ -329,6 +344,15 @@ uint64_t fout, rat;
 
 		if ( sis8300DigiSetup( fd, si5326_clk, div_clkhl, exttrig ) ) {
 			goto bail;
+		}
+
+		if ( sel_i_set ) {
+			sel = sel_i;
+		} else {
+			if ( (f = sis8300DigiGetFeatures( fd )) < 0 )
+				goto bail;
+			/* clip default selector to supported channels */
+			sel &= (1ULL << (SIS8300_FEAT_N_CHANNELS(f) * 4)) - 1ULL;
 		}
 
 		if ( sis8300DigiSetCount(fd, sel, nblks * 16) ) {
