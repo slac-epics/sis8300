@@ -129,7 +129,7 @@ rrd(int fd, unsigned off)
 sis8300_reg r;
 	r.offset = off;
 	if ( ioctl(fd, SIS8300_REG_READ, &r) ) {
-		fprintf(stderr,"ERROR: ioctl(SIS8300_REG_READ) failed: %s\n", strerror(errno));
+		fprintf(stderr,"ERROR: ioctl(SIS8300_REG_READ @%x) failed: %s\n", off, strerror(errno));
 	}
 	return r.data;
 }
@@ -141,7 +141,7 @@ sis8300_reg r;
 	r.offset = off;
 	r.data   = val;
 	if ( ioctl(fd, SIS8300_REG_WRITE, &r) ) {
-		fprintf(stderr,"ERROR: ioctl(SIS8300_REG_WRITE) failed: %s\n", strerror(errno));
+		fprintf(stderr,"ERROR: ioctl(SIS8300_REG_WRITE @%x) failed: %s\n", off, strerror(errno));
 	}
 }
 

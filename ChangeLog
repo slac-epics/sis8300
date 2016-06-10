@@ -1,3 +1,5 @@
+20160610 (T.S.):
+ - sis8300Digi.c: print error message if register read/write ioctl fails
 20150520 (T.S.):
  - sis8300Digi.h, sis8300.c: new option to let sis8300DigiValidateSel()
    run quietly.
