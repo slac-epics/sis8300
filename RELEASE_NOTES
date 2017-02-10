@@ -8,6 +8,8 @@
 #  Auth: xx-Dec-2012, XXX         (xxx)
 #  Rev:  dd-mmm-yyyy, Reviewer's Name    (USERNAME)
 #--------------------------------------------------------------
+R2.0.1:     09-Feb-2017, H. Slepicka (slepicka)
+            First version working with the new git workflow.           
 
 sis8300-R2-0-0   Tagged a release for production: using new linuxRT kernel
                  Till had to make some changes. 
