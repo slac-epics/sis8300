@@ -1,0 +1,11 @@
+# Home of all the Linux Kernel Modules
+KERNEL_MODULES_TOP=$(PACKAGE_SITE_TOP)/linuxKernel_Modules
+
+# ==================================================================
+# Support for Sis8300drv
+# ==================================================================
+# Kernel Driver header files
+KERNEL_MODULE_SIS8300DRV_VERSION=R2.2.0
+
+KERNEL_MODULE_SIS8300DRV_TOP=$(KERNEL_MODULES_TOP)/sis8300drv/$(KERNEL_MODULE_SIS8300DRV_VERSION)/rhel6-x86_64
+KERNEL_MODULE_SIS8300DRV_INCLUDE=$(KERNEL_MODULE_SIS8300DRV_TOP)/include

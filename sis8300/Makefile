@@ -8,7 +8,7 @@ include $(TOP)/configure/CONFIG
 
 # =====================================================================
 # Interface to Struck SIS8300 for mTCA 0.4 : linux kernel module
-USR_INCLUDES += -I$(SIS8300_KDRV)
+USR_INCLUDES += -I$(KERNEL_MODULE_SIS8300DRV_INCLUDE)
 # ====================================================================
 
 # ====================================================================

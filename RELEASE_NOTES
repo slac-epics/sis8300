@@ -9,7 +9,8 @@
 #  Rev:  dd-mmm-yyyy, Reviewer's Name    (USERNAME)
 #--------------------------------------------------------------
 R2.0.1:     09-Feb-2017, H. Slepicka (slepicka)
-            First version working with the new git workflow.           
+            First version working with the new git workflow.
+            Building only for linuxRT x86_64 and i686.
 
 sis8300-R2-0-0   Tagged a release for production: using new linuxRT kernel
                  Till had to make some changes. 
