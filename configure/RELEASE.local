@@ -26,12 +26,10 @@
 #  or
 # FOO = /Full/Path/To/Development/Version 
 # ==========================================================
-SIS8300_KDRV_MODULE_VERSION=buildroot-2016.11.1-x86_64
 
 # ============================================================
 #  Module Location
 # ============================================================
-SIS8300_KDRV=$(PACKAGE_SITE_TOP)/linuxKernel_Modules/sis8300drv/$(SIS8300_KDRV_MODULE_VERSION)
 
 
 # Set EPICS_BASE last so it appears last in the DB, DBD, INCLUDE, and LIB search paths
